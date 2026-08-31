@@ -12,7 +12,6 @@ local Config = {
     AimBot = {Enabled = false, Range = 100},
     Silent = {Enabled = false, Range = 100},
     Trigger = {Enabled = false, Range = 50, Delay = 50},
-    WallShot = {Enabled = false},
     Chams = {Enabled = false, Transparency = 0.3, FillColor = Color3.fromRGB(255,255,255), OutlineColor = Color3.fromRGB(0,0,0)},
     ESP = {Enabled = false, Box = true, Name = true, Health = true, Distance = true},
     BunnyHop = {Enabled = false, MaxSpeed = 100},
@@ -65,6 +64,7 @@ local AutoFarmTarget = nil
 local AutoFarmCoins = {}
 local AutoFarmLines = {}
 local CollectedCoins = {}
+local BlurEffect = nil
 
 local ConfigPath = "HirukuConfig.json"
 local function SaveConfig()
@@ -95,6 +95,10 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 99999
 ScreenGui.IgnoreGuiInset = true
+
+BlurEffect = Instance.new("BlurEffect")
+BlurEffect.Size = 0
+BlurEffect.Parent = Lighting
 
 local InjectScreen = Instance.new("Frame")
 InjectScreen.Size = UDim2.new(1,0,1,0)
@@ -156,7 +160,7 @@ end)
 local MenuButton = Instance.new("TextButton")
 MenuButton.Size = UDim2.new(0,150,0,35)
 MenuButton.Position = UDim2.new(0.5,-75,0.08,0)
-MenuButton.BackgroundColor3 = Color3.fromRGB(0,0,0)
+MenuButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
 MenuButton.BackgroundTransparency = 0.4
 MenuButton.Text = "Hiruku"
 MenuButton.TextColor3 = Color3.fromRGB(255,255,255)
@@ -170,12 +174,17 @@ MenuButton.Parent = ScreenGui
 local MenuButtonCorner = Instance.new("UICorner")
 MenuButtonCorner.CornerRadius = UDim.new(0,15)
 MenuButtonCorner.Parent = MenuButton
+local MenuButtonStroke = Instance.new("UIStroke")
+MenuButtonStroke.Color = Color3.fromRGB(255,255,255)
+MenuButtonStroke.Transparency = 0.5
+MenuButtonStroke.Thickness = 1
+MenuButtonStroke.Parent = MenuButton
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0,700,0,450)
 MainFrame.Position = UDim2.new(0.5,-350,0.5,-225)
-MainFrame.BackgroundColor3 = Color3.fromRGB(10,10,10)
-MainFrame.BackgroundTransparency = 0
+MainFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+MainFrame.BackgroundTransparency = 0.3
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
 MainFrame.Active = true
@@ -184,34 +193,49 @@ MainFrame.Parent = ScreenGui
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0,12)
 mainCorner.Parent = MainFrame
+local MainFrameStroke = Instance.new("UIStroke")
+MainFrameStroke.Color = Color3.fromRGB(255,255,255)
+MainFrameStroke.Transparency = 0.4
+MainFrameStroke.Thickness = 1
+MainFrameStroke.Parent = MainFrame
 
 local function ShowMenu()
+    MenuOpen = true
     MainFrame.Visible = true
     MainFrame.Size = UDim2.new(0,0,0,0)
     TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0,700,0,450)}):Play()
     TweenService:Create(MainFrame, TweenInfo.new(0.4), {Position = UDim2.new(0.5,-350,0.5,-225)}):Play()
-    for _, child in ipairs(MainFrame:GetDescendants()) do
-        if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("Frame") then
-            child.AnchorPoint = Vector2.new(0.5,0.5)
-        end
-    end
-    TweenService:Create(MainFrame, TweenInfo.new(0.4), {Position = UDim2.new(0.5,-350,0.5,-225)}):Play()
+    TweenService:Create(BlurEffect, TweenInfo.new(0.3), {Size = 5}):Play()
 end
 
 local function HideMenu()
+    MenuOpen = false
     TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0)}):Play()
-    TweenService:Create(MainFrame, TweenInfo.new(0.4), {Position = UDim2.new(0.5,-350,0.5,-225)}):Play()
+    TweenService:Create(BlurEffect, TweenInfo.new(0.3), {Size = 0}):Play()
     task.delay(0.4, function() MainFrame.Visible = false end)
 end
+
+MenuButton.MouseButton1Click:Connect(function()
+    if MenuOpen then HideMenu() else ShowMenu() end
+end)
+MenuButton.TouchTap:Connect(function()
+    if MenuOpen then HideMenu() else ShowMenu() end
+end)
 
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1,0,0,50)
 TitleBar.BackgroundColor3 = Color3.fromRGB(15,15,15)
+TitleBar.BackgroundTransparency = 0.3
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
 local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0,12)
 titleCorner.Parent = TitleBar
+local TitleBarStroke = Instance.new("UIStroke")
+TitleBarStroke.Color = Color3.fromRGB(255,255,255)
+TitleBarStroke.Transparency = 0.4
+TitleBarStroke.Thickness = 1
+TitleBarStroke.Parent = TitleBar
 
 local TitleText = Instance.new("TextLabel")
 TitleText.Size = UDim2.new(1, -60, 0, 25)
@@ -248,13 +272,27 @@ SearchBar.Parent = TitleBar
 local SearchCorner = Instance.new("UICorner")
 SearchCorner.CornerRadius = UDim.new(0,8)
 SearchCorner.Parent = SearchBar
+local SearchStroke = Instance.new("UIStroke")
+SearchStroke.Color = Color3.fromRGB(255,255,255)
+SearchStroke.Transparency = 0.5
+SearchStroke.Thickness = 1
+SearchStroke.Parent = SearchBar
 
 local Tabs = Instance.new("Frame")
 Tabs.Size = UDim2.new(1,0,0,40)
 Tabs.Position = UDim2.new(0,0,0,50)
 Tabs.BackgroundColor3 = Color3.fromRGB(5,5,5)
+Tabs.BackgroundTransparency = 0.3
 Tabs.BorderSizePixel = 0
 Tabs.Parent = MainFrame
+local tabsCorner = Instance.new("UICorner")
+tabsCorner.CornerRadius = UDim.new(0,12)
+tabsCorner.Parent = Tabs
+local TabsStroke = Instance.new("UIStroke")
+TabsStroke.Color = Color3.fromRGB(255,255,255)
+TabsStroke.Transparency = 0.4
+TabsStroke.Thickness = 1
+TabsStroke.Parent = Tabs
 
 local TabsLayout = Instance.new("UIListLayout")
 TabsLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -270,6 +308,7 @@ for i, name in ipairs(Sections) do
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0,120,0,30)
     btn.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    btn.BackgroundTransparency = 0.3
     btn.Text = name
     btn.TextColor3 = Color3.fromRGB(200,200,200)
     btn.Font = Enum.Font.Code
@@ -280,6 +319,11 @@ for i, name in ipairs(Sections) do
     local tabCorner = Instance.new("UICorner")
     tabCorner.CornerRadius = UDim.new(0,5)
     tabCorner.Parent = btn
+    local tabStroke = Instance.new("UIStroke")
+    tabStroke.Color = Color3.fromRGB(255,255,255)
+    tabStroke.Transparency = 0.5
+    tabStroke.Thickness = 1
+    tabStroke.Parent = btn
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1,0,1,-90)
     content.Position = UDim2.new(0,0,0,90)
@@ -297,20 +341,35 @@ local function CreateSettingPanel(parent, title)
     local panel = Instance.new("Frame")
     panel.Size = UDim2.new(1, -20, 0, 30)
     panel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    panel.BackgroundTransparency = 0.4
     panel.BorderSizePixel = 0
     panel.Parent = parent
     local panelCorner = Instance.new("UICorner")
     panelCorner.CornerRadius = UDim.new(0,8)
     panelCorner.Parent = panel
+    local panelStroke = Instance.new("UIStroke")
+    panelStroke.Color = Color3.fromRGB(255,255,255)
+    panelStroke.Transparency = 0.5
+    panelStroke.Thickness = 1
+    panelStroke.Parent = panel
     local header = Instance.new("TextLabel")
     header.Size = UDim2.new(1,0,0,25)
     header.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    header.BackgroundTransparency = 0.4
     header.Text = title
     header.TextColor3 = Color3.fromRGB(255,255,255)
     header.Font = Enum.Font.Code
     header.TextSize = 13
     header.TextXAlignment = Enum.TextXAlignment.Left
     header.Parent = panel
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0,8)
+    headerCorner.Parent = header
+    local headerStroke = Instance.new("UIStroke")
+    headerStroke.Color = Color3.fromRGB(255,255,255)
+    headerStroke.Transparency = 0.5
+    headerStroke.Thickness = 1
+    headerStroke.Parent = header
     return panel
 end
 
@@ -336,6 +395,11 @@ local function CreateToggle(parent, label, path)
     local toggleCorner = Instance.new("UICorner")
     toggleCorner.CornerRadius = UDim.new(1,0)
     toggleCorner.Parent = toggle
+    local toggleStroke = Instance.new("UIStroke")
+    toggleStroke.Color = Color3.fromRGB(255,255,255)
+    toggleStroke.Transparency = 0.5
+    toggleStroke.Thickness = 1
+    toggleStroke.Parent = toggle
     local check = Instance.new("Frame")
     check.Size = UDim2.new(0,12,0,12)
     check.Position = UDim2.new(0,2,0,2)
@@ -415,6 +479,11 @@ local function CreateSlider(parent, label, path, min, max, decimal)
     local sliderCorner = Instance.new("UICorner")
     sliderCorner.CornerRadius = UDim.new(1,0)
     sliderCorner.Parent = slider
+    local sliderStroke = Instance.new("UIStroke")
+    sliderStroke.Color = Color3.fromRGB(255,255,255)
+    sliderStroke.Transparency = 0.5
+    sliderStroke.Thickness = 1
+    sliderStroke.Parent = slider
     local fill = Instance.new("Frame")
     fill.Size = UDim2.new(0.5,0,1,0)
     fill.BackgroundColor3 = Color3.fromRGB(255,255,255)
@@ -575,9 +644,6 @@ CreateToggle(bhopPanel, "Enable", {"BunnyHop","Enabled"})
 CreateSlider(bhopPanel, "Max Speed", {"BunnyHop","MaxSpeed"}, 16, 200, false)
 
 local MiscTab = AllTabs["Misc"]
-local wallShotPanel = CreateSettingPanel(MiscTab, "Wall Shot")
-CreateToggle(wallShotPanel, "Enable", {"WallShot","Enabled"})
-
 local spinPanel = CreateSettingPanel(MiscTab, "Spin")
 CreateToggle(spinPanel, "Enable", {"Spin","Enabled"})
 CreateSlider(spinPanel, "Speed", {"Spin","Speed"}, 60, 720, false)
@@ -679,11 +745,9 @@ local function GetClosestTargetInFOV()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
             local head = FindHead(player.Character)
             if head then
-                if not Config.WallShot.Enabled then
-                    local ray = Ray.new(myPos.Position, (head.Position - myPos.Position).Unit * (myPos.Position - head.Position).Magnitude)
-                    local hit, hitPart = workspace:FindPartOnRay(ray, LocalPlayer.Character)
-                    if hit and not hitPart:IsDescendantOf(player.Character) then continue end
-                end
+                local ray = Ray.new(myPos.Position, (head.Position - myPos.Position).Unit * (myPos.Position - head.Position).Magnitude)
+                local hit, hitPart = workspace:FindPartOnRay(ray, LocalPlayer.Character)
+                if hit and not hitPart:IsDescendantOf(player.Character) then continue end
                 local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
                     local dist = (pos - center).Magnitude
@@ -1405,54 +1469,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-local isDraggingMenuButton = false
-local dragStartMenuButton = Vector2.new()
-local dragOffsetMenuButton = Vector2.new()
-local isClickMenuButton = false
-
-UserInputService.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        local absPos = MenuButton.AbsolutePosition
-        local size = MenuButton.AbsoluteSize
-        if pos.X >= absPos.X and pos.X <= absPos.X + size.X and pos.Y >= absPos.Y and pos.Y <= absPos.Y + size.Y then
-            isDraggingMenuButton = true
-            isClickMenuButton = true
-            dragStartMenuButton = pos
-            dragOffsetMenuButton = Vector2.new(pos.X - MenuButton.AbsolutePosition.X, pos.Y - MenuButton.AbsolutePosition.Y)
-        end
-    end
-end)
-UserInputService.TouchMoved:Connect(function(input)
-    if isDraggingMenuButton then
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        if (pos - dragStartMenuButton).Magnitude > 10 then
-            isClickMenuButton = false
-            MenuButton.Position = UDim2.new(0, pos.X - dragOffsetMenuButton.X, 0, pos.Y - dragOffsetMenuButton.Y)
-        end
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if isDraggingMenuButton and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local pos = Vector2.new(input.Position.X, input.Position.Y)
-        if (pos - dragStartMenuButton).Magnitude > 10 then
-            isClickMenuButton = false
-            MenuButton.Position = UDim2.new(0, pos.X - dragOffsetMenuButton.X, 0, pos.Y - dragOffsetMenuButton.Y)
-        end
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if isDraggingMenuButton then
-            if isClickMenuButton then
-                MenuOpen = not MenuOpen
-                if MenuOpen then ShowMenu() else HideMenu() end
-            end
-            isDraggingMenuButton = false
-        end
-    end
-end)
-
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0,26,0,26)
 CloseBtn.Position = UDim2.new(1,-31,0,4)
@@ -1463,7 +1479,6 @@ CloseBtn.TextScaled = true
 CloseBtn.Font = Enum.Font.Code
 CloseBtn.BorderSizePixel = 0
 CloseBtn.Parent = TitleBar
-
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0,5)
 closeCorner.Parent = CloseBtn
