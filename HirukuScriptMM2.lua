@@ -1405,52 +1405,68 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-local isDraggingCircle = false
-local dragStartCircle = Vector2.new()
-local dragOffsetCircle = Vector2.new()
-local isClickCircle = false
+local isDraggingMenuButton = false
+local dragStartMenuButton = Vector2.new()
+local dragOffsetMenuButton = Vector2.new()
+local isClickMenuButton = false
+
 UserInputService.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         local pos = Vector2.new(input.Position.X, input.Position.Y)
         local absPos = MenuButton.AbsolutePosition
         local size = MenuButton.AbsoluteSize
         if pos.X >= absPos.X and pos.X <= absPos.X + size.X and pos.Y >= absPos.Y and pos.Y <= absPos.Y + size.Y then
-            isDraggingCircle = true
-            isClickCircle = true
-            dragStartCircle = pos
-            dragOffsetCircle = Vector2.new(pos.X - MenuButton.AbsolutePosition.X, pos.Y - MenuButton.AbsolutePosition.Y)
+            isDraggingMenuButton = true
+            isClickMenuButton = true
+            dragStartMenuButton = pos
+            dragOffsetMenuButton = Vector2.new(pos.X - MenuButton.AbsolutePosition.X, pos.Y - MenuButton.AbsolutePosition.Y)
         end
     end
 end)
 UserInputService.TouchMoved:Connect(function(input)
-    if isDraggingCircle then
+    if isDraggingMenuButton then
         local pos = Vector2.new(input.Position.X, input.Position.Y)
-        if (pos - dragStartCircle).Magnitude > 10 then
-            isClickCircle = false
-            MenuButton.Position = UDim2.new(0, pos.X - dragOffsetCircle.X, 0, pos.Y - dragOffsetCircle.Y)
+        if (pos - dragStartMenuButton).Magnitude > 10 then
+            isClickMenuButton = false
+            MenuButton.Position = UDim2.new(0, pos.X - dragOffsetMenuButton.X, 0, pos.Y - dragOffsetMenuButton.Y)
         end
     end
 end)
 UserInputService.InputChanged:Connect(function(input)
-    if isDraggingCircle and input.UserInputType == Enum.UserInputType.MouseMovement then
+    if isDraggingMenuButton and input.UserInputType == Enum.UserInputType.MouseMovement then
         local pos = Vector2.new(input.Position.X, input.Position.Y)
-        if (pos - dragStartCircle).Magnitude > 10 then
-            isClickCircle = false
-            MenuButton.Position = UDim2.new(0, pos.X - dragOffsetCircle.X, 0, pos.Y - dragOffsetCircle.Y)
+        if (pos - dragStartMenuButton).Magnitude > 10 then
+            isClickMenuButton = false
+            MenuButton.Position = UDim2.new(0, pos.X - dragOffsetMenuButton.X, 0, pos.Y - dragOffsetMenuButton.Y)
         end
     end
 end)
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if isDraggingCircle then
-            if isClickCircle then
+        if isDraggingMenuButton then
+            if isClickMenuButton then
                 MenuOpen = not MenuOpen
                 if MenuOpen then ShowMenu() else HideMenu() end
             end
-            isDraggingCircle = false
+            isDraggingMenuButton = false
         end
     end
 end)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,26,0,26)
+CloseBtn.Position = UDim2.new(1,-31,0,4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(150,40,40)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
+CloseBtn.TextScaled = true
+CloseBtn.Font = Enum.Font.Code
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0,5)
+closeCorner.Parent = CloseBtn
 CloseBtn.MouseButton1Click:Connect(function() MenuOpen = false HideMenu() end)
 CloseBtn.TouchTap:Connect(function() MenuOpen = false HideMenu() end)
 
