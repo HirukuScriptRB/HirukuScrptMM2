@@ -1,4 +1,4 @@
---// HIRUKU MM2 V12
+--// HIRUKU MM2 V14
 --// Mobile movement, Coin farming, pickup routing and animated typography refresh.
 --// Mobile-first Roblox UI
 --// Features: animated menu, themes, fonts, role-aware visuals, aim assist,
@@ -51,6 +51,7 @@ local S = {
     Chams = false,
     RoleLabels = true,
     Watermark = false,
+    EspGun = false,
     Crosshair = false,
     Fullbright = false,
 
@@ -84,6 +85,7 @@ local S = {
     Theme = "Obsidian",
     Font = "Gotham",
     UIScale = 1.0,
+    MenuOpacity = .90,
     Language = "English",
 
     _saved = {},
@@ -93,7 +95,16 @@ local CONNS = {}
 local INSTANCES = {}
 local CHAMS = {}
 local ROLE_LABELS = {}
+local GUN_ESPS = {}
 local DRAG = {active=false, input=nil, start=nil, origin=nil}
+local GUI_SCALE_OBJECT = nil
+local originalWalkSpeed = nil
+local originalJumpPower = nil
+local originalAutoRotate = nil
+local flyVerticalUntil = 0
+local lastGunPickup = 0
+local lastCoinHop = 0
+local gunEspClock = 0
 
 local function conn(c)
     if c then table.insert(CONNS, c) end
@@ -294,6 +305,7 @@ local function button(parent, text, size, pos, z)
     b.TextColor3 = T().text
     b.TextSize = 13
     b.Font = FONT_MAP[S.Font] or Enum.Font.Gotham
+    b.TextTruncate = Enum.TextTruncate.AtEnd
     b.BackgroundColor3 = T().card
     b.BackgroundTransparency = 0
     b.BorderSizePixel = 0
@@ -317,11 +329,12 @@ end
 
 local function scaleGui()
     if not gui then return end
-    local old = gui:FindFirstChild("UIScale")
-    if old then old:Destroy() end
-    local sc = Instance.new("UIScale")
-    sc.Scale = S.UIScale
-    sc.Parent = gui
+    if not GUI_SCALE_OBJECT or not GUI_SCALE_OBJECT.Parent then
+        GUI_SCALE_OBJECT = gui:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+        GUI_SCALE_OBJECT.Name = "HirukuScale"
+        GUI_SCALE_OBJECT.Parent = gui
+    end
+    GUI_SCALE_OBJECT.Scale = math.clamp(S.UIScale, 0.80, 1.20)
 end
 
 --==================================================
@@ -339,6 +352,7 @@ local pillText = label(pill, "Hiruku", UDim2.fromScale(1,1), UDim2.fromOffset(0,
 
 local main = frame(gui, UDim2.fromOffset(760,510), UDim2.new(.5,-380,.5,-255), T().panel, .18, 200)
 corner(main, 18)
+main.BackgroundTransparency=1-S.MenuOpacity
 stroke(main, T().line, .1, 1)
 
 local glass = frame(main, UDim2.fromScale(1,1), UDim2.fromScale(0,0), T().panel, .42, 201)
@@ -351,8 +365,8 @@ corner(frostA,16)
 local frostB = frame(main, UDim2.new(1,-18,1,-18), UDim2.fromOffset(9,9), Color3.fromRGB(255,255,255), .985, 203)
 corner(frostB,14)
 
-local title = label(main, "Hiruku", UDim2.fromOffset(300,34), UDim2.fromOffset(24,18), 23, T().text, 220)
-local version = label(main, "MM2 - v 1.0", UDim2.fromOffset(220,20), UDim2.fromOffset(25,50), 11, T().sub, 220)
+local title = label(main, "Hiruku", UDim2.fromOffset(260,34), UDim2.fromOffset(24,18), 23, T().text, 220)
+local version = label(main, "MM2 - v 1.0", UDim2.fromOffset(180,20), UDim2.fromOffset(25,50), 11, T().sub, 220)
 
 local function addAnimatedTextGradient(obj)
     local g = Instance.new("UIGradient")
@@ -367,7 +381,7 @@ local function addAnimatedTextGradient(obj)
     g.Offset = Vector2.new(-1,0)
     g.Parent = obj
     obj.TextStrokeColor3 = Color3.fromRGB(255,255,255)
-    obj.TextStrokeTransparency = 0.82
+    obj.TextStrokeTransparency = 0.72
     task.spawn(function()
         while obj.Parent do
             g.Offset = Vector2.new(-1,0)
@@ -401,9 +415,9 @@ search.ZIndex = 225
 search.Parent = main
 corner(search,19)
 
-local nav = frame(main, UDim2.fromOffset(168,340), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 225)
+local nav = frame(main, UDim2.fromOffset(150,340), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 225)
 corner(nav,12)
-local content = frame(main, UDim2.new(1,-210,1,-150), UDim2.fromOffset(194,135), Color3.new(0,0,0), 1, 225)
+local content = frame(main, UDim2.new(1,-190,1,-150), UDim2.fromOffset(174,135), Color3.new(0,0,0), 1, 225)
 
 local pages = {}
 local navButtons = {}
@@ -432,6 +446,14 @@ for i, name in ipairs(pageNames) do
     pages[name] = pg
     pageLayout[name] = {}
     pageCursor[name] = 0
+end
+
+local function updateResponsiveLayout()
+    local mw=main.AbsoluteSize.X
+    local navW=math.clamp(mw*.22,132,160)
+    nav.Size=UDim2.fromOffset(navW,math.max(250,main.AbsoluteSize.Y-155))
+    content.Position=UDim2.fromOffset(navW+24,135)
+    content.Size=UDim2.new(1,-navW-44,1,-150)
 end
 
 local close = button(main, "×", UDim2.fromOffset(38,38), UDim2.new(1,-58,0,18), 230)
@@ -495,6 +517,7 @@ stroke(toast, T().line, .1)
 local toastText = label(toast, "Hiruku loaded", UDim2.new(1,-28,1,0), UDim2.fromOffset(14,0), 13, T().text, 505)
 
 local function notify(text)
+    if S._showNotifications==false then return end
     toastText.Text = text
     toast.Position = UDim2.new(0,-320,1,-72)
     tween(toast,.35,{Position=UDim2.new(0,18,1,-72)})
@@ -508,38 +531,77 @@ end
 --==================================================
 
 main.Visible = false
-main.Size = UDim2.fromOffset(main.AbsoluteSize.X,0)
-main.Position = UDim2.fromOffset(main.AbsolutePosition.X,math.max(0,main.AbsolutePosition.Y+main.AbsoluteSize.Y/2))
+local menuAnimating = false
+local drawer
+
+local function menuTargetSize()
+    local vp = Camera.ViewportSize
+    local scale = math.clamp(S.UIScale, .80, 1.20)
+    local w = math.min(760, math.max(340, (vp.X - 20) / scale))
+    local h = math.min(510, math.max(400, (vp.Y - 20) / scale))
+    return UDim2.fromOffset(w, h)
+end
 
 local function animateMenuElements(show)
     local titleAlpha = show and 0 or 1
-    local versionAlpha = show and .05 or 1
-    tween(title,.24,{TextTransparency=titleAlpha},Enum.EasingStyle.Quart)
-    tween(version,.24,{TextTransparency=versionAlpha},Enum.EasingStyle.Quart)
-    tween(search,.26,{BackgroundTransparency=show and .08 or 1,TextTransparency=show and 0 or 1},Enum.EasingStyle.Quart)
+    local versionAlpha = show and 0 or 1
+    tween(title,.22,{TextTransparency=titleAlpha},Enum.EasingStyle.Quart)
+    tween(version,.22,{TextTransparency=versionAlpha},Enum.EasingStyle.Quart)
+    tween(search,.22,{BackgroundTransparency=show and .08 or 1,TextTransparency=show and 0 or 1},Enum.EasingStyle.Quart)
     for _,b in pairs(navButtons) do
-        tween(b,.26,{BackgroundTransparency=show and 0 or 1,TextTransparency=show and 0 or 1},Enum.EasingStyle.Quart)
+        tween(b,.22,{BackgroundTransparency=show and 0 or 1,TextTransparency=show and 0 or 1},Enum.EasingStyle.Quart)
     end
 end
 
 local function openMenu()
-    if S.Open then return end
+    if S.Open or menuAnimating then return end
+    menuAnimating = true
     S.Open = true
+    scaleGui()
+    local target = menuTargetSize()
+    local vp = Camera.ViewportSize
+    local tw = target.X.Offset
+    local th = target.Y.Offset
+    local x = math.clamp((vp.X-tw)/2, 8, math.max(8,vp.X-tw-8))
+    local y = math.clamp((vp.Y-th)/2, 8, math.max(8,vp.Y-th-8))
+    main.Position = UDim2.fromOffset(x, y + th/2)
+    main.Size = UDim2.fromOffset(tw, 0)
     main.Visible = true
-    main.Size = UDim2.fromOffset(main.AbsoluteSize.X,0)
-    main.Position = UDim2.fromOffset(main.AbsolutePosition.X,math.max(0,main.AbsolutePosition.Y+main.AbsoluteSize.Y/2))
-    main.BackgroundTransparency = .18
+    main.BackgroundTransparency = 1-S.MenuOpacity
     animateMenuElements(true)
-    tween(main,.38,{Size=UDim2.fromOffset(math.min(760,math.max(320,Camera.ViewportSize.X-28)),math.min(510,math.max(390,Camera.ViewportSize.Y-28))),BackgroundTransparency=.04},Enum.EasingStyle.Quint)
+    local t = tween(main,.34,{Position=UDim2.fromOffset(x,y),Size=target,BackgroundTransparency=1-S.MenuOpacity},Enum.EasingStyle.Quint)
+    t.Completed:Connect(function()
+        menuAnimating = false
+    end)
 end
 
 local function closeMenu()
-    if not S.Open then return end
+    if drawer and drawer.Visible then
+        drawer.Visible = false
+    end
+    if not S.Open or menuAnimating then
+        return
+    end
+    menuAnimating = true
     S.Open = false
+    -- Close any open settings drawer at the same time.
+    if drawer and drawer.Visible then
+        drawer.Visible = false
+    end
     animateMenuElements(false)
-    tween(main,.28,{Size=UDim2.fromOffset(main.AbsoluteSize.X,0),BackgroundTransparency=.18},Enum.EasingStyle.Quint)
-    task.delay(.30,function()
-        if not S.Open then main.Visible = false end
+    local pos = main.Position
+    local size = main.AbsoluteSize
+    local scaledW = math.max(320, size.X / math.max(S.UIScale,.01))
+    local scaledH = math.max(0, size.Y / math.max(S.UIScale,.01))
+    local targetY = pos.Y.Offset + scaledH/2
+    local t = tween(main,.28,{
+        Position=UDim2.fromOffset(pos.X.Offset,targetY),
+        Size=UDim2.fromOffset(scaledW,0),
+        BackgroundTransparency=1-S.MenuOpacity
+    },Enum.EasingStyle.Quint)
+    t.Completed:Connect(function()
+        if not S.Open then main.Visible=false end
+        menuAnimating=false
     end)
 end
 
@@ -590,8 +652,8 @@ local function toggleCard(parent, name, desc, get, set, settingsFn)
 
     local c = frame(parent, UDim2.new(1,-10,0,68), UDim2.fromOffset(5,y), T().card, .02, 235)
     corner(c,11)
-    local n = label(c,name,UDim2.new(1,-100,0,22),UDim2.fromOffset(14,7),13,T().text,240)
-    local d = label(c,desc,UDim2.new(1,-105,0,19),UDim2.fromOffset(14,34),10,T().sub,240)
+    local n = label(c,name,UDim2.new(1,-112,0,22),UDim2.fromOffset(14,7),13,T().text,240)
+    local d = label(c,desc,UDim2.new(1,-112,0,19),UDim2.fromOffset(14,34),10,T().sub,240)
     d.TextTruncate = Enum.TextTruncate.AtEnd
 
     local sw = button(c,"",UDim2.fromOffset(44,24),UDim2.new(1,-58,.5,-12),245)
@@ -621,7 +683,7 @@ local function toggleCard(parent, name, desc, get, set, settingsFn)
     end))
 
     if settingsFn then
-        local setBtn = button(c,"SET",UDim2.fromOffset(38,20),UDim2.new(1,-105,.5,-10),244)
+        local setBtn = button(c,"SET",UDim2.fromOffset(36,20),UDim2.new(1,-99,.5,-10),244)
         setBtn.TextSize = 9
         setBtn.BackgroundTransparency = .35
         conn(setBtn.Activated:Connect(settingsFn))
@@ -690,7 +752,7 @@ end
 -- DRAWERS
 --==================================================
 
-local drawer = frame(gui, UDim2.fromOffset(320,360), UDim2.new(.5,390,.5,-180), T().panel, .03, 700)
+drawer = frame(gui, UDim2.fromOffset(320,360), UDim2.new(.5,390,.5,-180), T().panel, .03, 700)
 corner(drawer,16)
 stroke(drawer,T().line,.08)
 drawer.Visible = false
@@ -737,8 +799,13 @@ local function openDrawer(titleText, builder)
 end
 
 local function closeDrawer()
-    tween(drawer,.2,{Size=UDim2.fromOffset(320,0)})
-    task.delay(.22,function() drawer.Visible=false end)
+    if not drawer.Visible then return end
+    local targetX = drawer.Position.X.Offset
+    local targetY = drawer.Position.Y.Offset
+    tween(drawer,.18,{Size=UDim2.fromOffset(320,0),BackgroundTransparency=.35},Enum.EasingStyle.Quint)
+    task.delay(.19,function()
+        if drawer then drawer.Visible=false end
+    end)
 end
 conn(drawerClose.Activated:Connect(closeDrawer))
 
@@ -887,6 +954,7 @@ section(visuals,"PLAYER VISUALS",4)
 toggleCard(visuals,"Chams","Role-aware player highlights",function() return S.Chams end,function(v) S.Chams=v end)
 toggleCard(visuals,"Role Labels","Show player name and detected role",function() return S.RoleLabels end,function(v) S.RoleLabels=v end)
 toggleCard(visuals,"Watermark","Hiruku • FPS • player • ping",function() return S.Watermark end,function(v) S.Watermark=v end)
+toggleCard(visuals,"ESP Gun","Highlight dropped guns on the map in orange",function() return S.EspGun end,function(v) S.EspGun=v end)
 toggleCard(visuals,"Crosshair","Minimal center reticle",function() return S.Crosshair end,function(v) S.Crosshair=v end)
 toggleCard(visuals,"Fullbright","Maximum local lighting",function() return S.Fullbright end,function(v) S.Fullbright=v end)
 section(visuals,"COINS",350)
@@ -963,7 +1031,14 @@ toggleCard(misc,"Coin Farm","Find the nearest object named Coin",function() retu
     end)
 end)
 
-toggleCard(misc,"Auto Pickup Gun","Move to dropped gun objects automatically",function() return S.AutoPickupGun end,function(v) S.AutoPickupGun=v end)
+toggleCard(misc,"Auto Pickup Gun","Instantly attempts supported dropped-gun pickup methods",function() return S.AutoPickupGun end,function(v) S.AutoPickupGun=v end,function()
+    openDrawer("Auto Pickup Gun",function()
+        drawerToggle("Enabled",function() return S.AutoPickupGun end,function(v) S.AutoPickupGun=v end,4)
+        local info=label(drawerBody,"Recognizes GunDrop, Gun, Pistol and DroppedGun objects.",UDim2.new(1,-12,0,42),UDim2.fromOffset(6,58),10,T().sub,715)
+        info.TextWrapped=true
+        info.TextYAlignment=Enum.TextYAlignment.Top
+    end)
+end)
 toggleCard(misc,"Anti AFK","Keep the client active",function() return S.AntiAFK end,function(v) S.AntiAFK=v end)
 
 --==================================================
@@ -1008,9 +1083,24 @@ toggleCard(settings,"Font","Change menu typography",function() return false end,
 end)
 
 sliderCard(settings,"Interface size",80,120,function() return S.UIScale*100 end,function(v)
-    S.UIScale=v/100
+    S.UIScale=math.clamp(v/100,.80,1.20)
     scaleGui()
+    task.defer(fitWindow)
 end)
+toggleCard(settings,"Show Notifications","Show status messages in the lower-left",function() return S._showNotifications~=false end,function(v) S._showNotifications=v end)
+sliderCard(settings,"Menu Opacity",50,95,function() return S.MenuOpacity*100 end,function(v)
+    S.MenuOpacity=math.clamp(v/100,.50,.95)
+    main.BackgroundTransparency=1-S.MenuOpacity
+end)
+toggleCard(settings,"Reset Position","Center the menu on the screen",function() return false end,function(v)
+    if v then
+        local vp=Camera.ViewportSize
+        local target=menuTargetSize()
+        local scale=math.clamp(S.UIScale,.80,1.20)
+        main.Position=UDim2.fromOffset((vp.X-target.X.Offset*scale)/2/scale,(vp.Y-target.Y.Offset*scale)/2/scale)
+    end
+end)
+
 
 --==================================================
 -- FOV / WATERMARK / CROSSHAIR
@@ -1134,6 +1224,63 @@ local function refreshVisuals()
         updateVisual(p)
     end
 end
+local function isPlayerCharacterModel(m)
+    return m and Players:GetPlayerFromCharacter(m) ~= nil
+end
+
+local function removeGunEsp(obj)
+    local h=GUN_ESPS[obj]
+    if h then pcall(function() h:Destroy() end) end
+    GUN_ESPS[obj]=nil
+end
+
+local function gunPartOf(obj)
+    if not obj or not obj:IsDescendantOf(Workspace) then return nil end
+    if obj:IsA("BasePart") then return obj end
+    if obj:IsA("Model") then
+        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true)
+    end
+    return nil
+end
+
+local function isDroppedGunObject(obj)
+    if not obj then return false end
+    local n=obj.Name:lower()
+    if n=="gundrop" or n=="droppedgun" or n=="pistol" or n=="droppedpistol" then return true end
+    if n=="gun" and not isPlayerCharacterModel(obj:FindFirstAncestorOfClass("Model")) then return true end
+    return false
+end
+
+local function refreshGunEsp()
+    for obj in pairs(GUN_ESPS) do
+        if not obj.Parent or not isDroppedGunObject(obj) then removeGunEsp(obj) end
+    end
+    if not S.EspGun then
+        for obj in pairs(GUN_ESPS) do removeGunEsp(obj) end
+        return
+    end
+    for _,obj in ipairs(Workspace:GetDescendants()) do
+        if isDroppedGunObject(obj) then
+            local host = obj:IsA("Model") and obj or obj:FindFirstAncestorOfClass("Model") or obj
+            if not GUN_ESPS[host] then
+                local part=gunPartOf(host)
+                if part then
+                    local h=Instance.new("Highlight")
+                    h.Name="HirukuGunESP"
+                    h.Adornee=host
+                    h.FillColor=Color3.fromRGB(255,150,35)
+                    h.OutlineColor=Color3.fromRGB(255,205,100)
+                    h.FillTransparency=.35
+                    h.OutlineTransparency=.05
+                    h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+                    h.Parent=gui
+                    GUN_ESPS[host]=h
+                end
+            end
+        end
+    end
+end
+
 
 --==================================================
 -- TARGETING / AIM ASSIST
@@ -1260,7 +1407,7 @@ local function findDroppedGun()
     local best,dist=nil,math.huge
     for _,d in ipairs(Workspace:GetDescendants()) do
         local n=d.Name:lower()
-        if n=="gun" or n=="pistol" or n=="droppedgun" then
+        if n=="gun" or n=="pistol" or n=="droppedgun" or n=="gundrop" or n=="droppedpistol" then
             local p
             if d:IsA("BasePart") then p=d
             elseif d:IsA("Model") then p=d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart",true) end
@@ -1297,57 +1444,59 @@ end
 -- MOVEMENT
 --==================================================
 
-local function movementVector()
+local function rememberMovementDefaults()
     local h=humanoid(char())
-    if not h then return Vector3.zero end
-    local v=h.MoveDirection
-    if v.Magnitude>0 then return v.Unit end
-    return Camera.CFrame.LookVector
+    if not h then return end
+    if originalWalkSpeed==nil then originalWalkSpeed=h.WalkSpeed end
+    if originalJumpPower==nil then originalJumpPower=h.JumpPower end
+    if originalAutoRotate==nil then originalAutoRotate=h.AutoRotate end
 end
 
-local flyJumpHold = 0
+local function restoreMovementDefaults()
+    local h=humanoid(char())
+    if not h then return end
+    if originalWalkSpeed then h.WalkSpeed=originalWalkSpeed end
+    if originalJumpPower then h.JumpPower=originalJumpPower end
+    if originalAutoRotate~=nil then h.AutoRotate=originalAutoRotate end
+    h.PlatformStand=false
+end
 
 local function doFly(dt)
-    local r=root(char())
-    local h=humanoid(char())
-    if not r or not h then return end
+    local c=char()
+    local r=root(c)
+    local h=humanoid(c)
+    if not r or not h or h.Health<=0 then return end
+    rememberMovementDefaults()
 
     local move=h.MoveDirection
-    local cf=Camera.CFrame
-    local forward=Vector3.new(cf.LookVector.X,0,cf.LookVector.Z)
-    local right=Vector3.new(cf.RightVector.X,0,cf.RightVector.Z)
-    if forward.Magnitude < .01 then forward=Vector3.new(0,0,-1) end
-    if right.Magnitude < .01 then right=Vector3.new(1,0,0) end
-    forward=forward.Unit
-    right=right.Unit
-
-    local dir=Vector3.zero
-    if move.Magnitude > .01 then
-        local f=move:Dot(forward)
-        local rr=move:Dot(right)
-        dir=(forward*f + right*rr)
-        if dir.Magnitude>.01 then dir=dir.Unit end
+    local targetVel=Vector3.zero
+    if move.Magnitude>.02 then
+        targetVel=move.Unit*S.FlySpeed
     end
 
-    -- On mobile the normal jump button is the vertical control.
-    -- Each jump gives a short upward flight window; the joystick controls X/Z.
-    if h.Jump or h:GetState()==Enum.HumanoidStateType.Jumping then
-        flyJumpHold=math.max(flyJumpHold,.38)
+    -- Android jump button is the vertical control.
+    local state=h:GetState()
+    if h.Jump or state==Enum.HumanoidStateType.Jumping then
+        flyVerticalUntil=math.max(flyVerticalUntil,os.clock()+.32)
     end
-    flyJumpHold=math.max(0,flyJumpHold-dt)
-    local vertical=flyJumpHold>0 and 1 or 0
+    local y=0
+    if os.clock()<flyVerticalUntil then y=S.FlySpeed end
 
-    local target=dir*S.FlySpeed + Vector3.new(0,vertical*S.FlySpeed,0)
-    r.AssemblyLinearVelocity=r.AssemblyLinearVelocity:Lerp(target,math.clamp(dt*10,0,1))
-    h.PlatformStand=true
+    h.AutoRotate=false
+    h.PlatformStand=false
+    local desired=Vector3.new(targetVel.X,y,targetVel.Z)
+    r.AssemblyLinearVelocity=r.AssemblyLinearVelocity:Lerp(desired,math.clamp(dt*9,0,1))
 end
 
 local function stopFly()
-    flyJumpHold=0
+    flyVerticalUntil=0
     local h=humanoid(char())
     local r=root(char())
-    if h then h.PlatformStand=false end
-    if r then r.AssemblyLinearVelocity=Vector3.zero end
+    if h then
+        h.PlatformStand=false
+        h.AutoRotate=originalAutoRotate==nil and true or originalAutoRotate
+    end
+    -- Never modify velocity here; doing so breaks normal Roblox running/jumping.
 end
 
 --==================================================
@@ -1367,7 +1516,6 @@ local lastAttack=0
 local targetScanClock=0
 local cachedCoin=nil
 local cachedGun=nil
-local originalWalkSpeed=nil
 
 conn(RunService.RenderStepped:Connect(function(dt)
     frames+=1
@@ -1412,43 +1560,48 @@ conn(RunService.RenderStepped:Connect(function(dt)
         stopFly()
     end
 
-    -- Bunny hop: mobile joystick + repeated jump, with gradual acceleration.
-    if S.BunnyHop then
+    -- Bunny hop: gradual acceleration while moving, automatic jump on landing.
+    if S.BunnyHop and not S.Fly and not S.CoinFarm then
         local h=humanoid(char())
         if h and h.Health>0 then
-            local moving=h.MoveDirection.Magnitude>.05
+            rememberMovementDefaults()
+            local moving=h.MoveDirection.Magnitude>.08
             if moving then
                 S.BunnyCurrentSpeed=math.min(S.BunnySpeed,S.BunnyCurrentSpeed + S.BunnyAccel*dt)
                 h.WalkSpeed=S.BunnyCurrentSpeed
                 if h.FloorMaterial~=Enum.Material.Air then
-                    h.Jump=true
-                end
-                if S.BunnyAutoStrafe then
-                    local r=root(char())
-                    if r then
-                        local v=r.AssemblyLinearVelocity
-                        local want=h.MoveDirection.Unit*S.BunnyCurrentSpeed
-                        local air=S.BunnyAirControl
-                        r.AssemblyLinearVelocity=Vector3.new(
-                            v.X+(want.X-v.X)*math.clamp(dt*air*8,0,1),
-                            v.Y,
-                            v.Z+(want.Z-v.Z)*math.clamp(dt*air*8,0,1)
-                        )
-                    end
+                    h:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
             else
-                S.BunnyCurrentSpeed=16
-                h.WalkSpeed=16
+                S.BunnyCurrentSpeed=originalWalkSpeed or 16
+                h.WalkSpeed=originalWalkSpeed or 16
             end
         end
-    else
-        S.BunnyCurrentSpeed=16
+    elseif not S.BunnyHop and not S.Fly then
+        local h=humanoid(char())
+        if h and originalWalkSpeed then h.WalkSpeed=originalWalkSpeed end
+        S.BunnyCurrentSpeed=originalWalkSpeed or 16
     end
 
-    -- No clip
+    -- No clip with restoration when disabled.
     if S.NoClip and char() then
         for _,p in ipairs(char():GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide=false end
+            if p:IsA("BasePart") then
+                if p:GetAttribute("HirukuOriginalCollision")==nil then
+                    p:SetAttribute("HirukuOriginalCollision",p.CanCollide)
+                end
+                p.CanCollide=false
+            end
+        end
+    elseif char() then
+        for _,p in ipairs(char():GetDescendants()) do
+            if p:IsA("BasePart") then
+                local old=p:GetAttribute("HirukuOriginalCollision")
+                if old~=nil then
+                    p.CanCollide=old
+                    p:SetAttribute("HirukuOriginalCollision",nil)
+                end
+            end
         end
     end
 
@@ -1477,30 +1630,39 @@ conn(RunService.RenderStepped:Connect(function(dt)
         if S.AutoPickupGun then cachedGun=findDroppedGun() else cachedGun=nil end
     end
 
-    -- Coin Farm: direct CFrame flight ignores normal collision paths and follows Coin objects.
-    if S.CoinFarm then
+    -- Coin Farm: short, controlled hops to the nearest Coin so walls do not stall the route.
+    if S.CoinFarm and not S.Fly then
         local coin=cachedCoin
         local rr=root(char())
-        if coin and rr then
-            for _,part in ipairs(char():GetDescendants()) do
-                if part:IsA("BasePart") then
-                    if part:GetAttribute("HirukuOriginalCollision")==nil then part:SetAttribute("HirukuOriginalCollision",part.CanCollide) end
-                    part.CanCollide=false
+        if coin and rr and os.clock()-lastCoinHop>.12 then
+            lastCoinHop=os.clock()
+            local oldCF=rr.CFrame
+            local target=coin.Position+Vector3.new(0,1.8,0)
+            rr.CFrame=CFrame.new(target)
+            touchPickup(coin)
+            task.delay(.04,function()
+                if rr and rr.Parent and S.CoinFarm then
+                    rr.CFrame=oldCF
                 end
-            end
-            local target=coin.Position+Vector3.new(0,1.5,0)
-            local delta=target-rr.Position
-            local alpha=math.clamp(dt*S.CoinSpeed/math.max(delta.Magnitude,1),.04,1)
-            rr.CFrame=CFrame.new(rr.Position:Lerp(target,alpha))
-            rr.AssemblyLinearVelocity=Vector3.zero
-            if delta.Magnitude<5 then touchPickup(coin) end
+            end)
         end
     end
 
-    -- Auto Pickup Gun: attempt every supported pickup mechanism without requiring the
-    -- character to run toward the dropped weapon.
-    if S.AutoPickupGun and cachedGun then
-        touchPickup(cachedGun)
+    -- Auto Pickup Gun: briefly place the character at the dropped gun, fire every
+    -- available pickup mechanism, then immediately restore the previous position.
+    if S.AutoPickupGun and cachedGun and os.clock()-lastGunPickup>.30 then
+        lastGunPickup=os.clock()
+        local rr=root(char())
+        if rr then
+            local oldCF=rr.CFrame
+            rr.CFrame=CFrame.new(cachedGun.Position+Vector3.new(0,1.2,0))
+            touchPickup(cachedGun)
+            task.delay(.06,function()
+                if rr and rr.Parent and S.AutoPickupGun then
+                    rr.CFrame=oldCF
+                end
+            end)
+        end
     end
 
     -- Kill Aura / Selected / All
@@ -1558,7 +1720,11 @@ for _,p in ipairs(Players:GetPlayers()) do
 end
 
 conn(LocalPlayer.CharacterAdded:Connect(function()
+    originalWalkSpeed=nil
+    originalJumpPower=nil
+    originalAutoRotate=nil
     task.wait(.4)
+    rememberMovementDefaults()
     if S.NoClip then
         for _,p in ipairs(char():GetDescendants()) do
             if p:IsA("BasePart") then p.CanCollide=false end
@@ -1587,6 +1753,7 @@ local function applyStyle(rootGui)
             if o==main or o:IsDescendantOf(main) then
                 if o==main or o==glass then
                     o.BackgroundColor3=T().panel
+                    if o==main then o.BackgroundTransparency=1-S.MenuOpacity end
                 elseif o:IsA("TextButton") or o:IsA("TextBox") then
                     if o==search then o.BackgroundColor3=T().card end
                 end
@@ -1618,6 +1785,15 @@ conn(RunService.Heartbeat:Connect(function()
                     if t then t.Text=p.DisplayName.." • "..r; t.TextColor3=ROLE_COLOR[r] or ROLE_COLOR.Unknown end
                 end
             end
+        end
+    end
+    gunEspClock += dt
+    if gunEspClock >= .5 then
+        gunEspClock = 0
+        if S.EspGun then
+            refreshGunEsp()
+        elseif next(GUN_ESPS) then
+            for obj in pairs(GUN_ESPS) do removeGunEsp(obj) end
         end
     end
 end))
@@ -1666,11 +1842,15 @@ function S.Cleanup()
     disconnectAll()
     for p in pairs(CHAMS) do pcall(function() CHAMS[p]:Destroy() end) end
     for p in pairs(ROLE_LABELS) do pcall(function() ROLE_LABELS[p]:Destroy() end) end
+    for o in pairs(GUN_ESPS) do pcall(function() GUN_ESPS[o]:Destroy() end) end
     table.clear(CHAMS)
     table.clear(ROLE_LABELS)
+    table.clear(GUN_ESPS)
     stopFly()
-    local h=humanoid(char())
-    if h then h.WalkSpeed=originalWalkSpeed or 16 end
+    restoreMovementDefaults()
+    originalWalkSpeed=nil
+    originalJumpPower=nil
+    originalAutoRotate=nil
     if char() then
         for _,p in ipairs(char():GetDescendants()) do
             if p:IsA("BasePart") then
@@ -1695,15 +1875,21 @@ scaleGui()
 
 local function fitWindow()
     local vp=Camera.ViewportSize
-    local w=math.min(760,math.max(320,vp.X-28))
-    local h=math.min(510,math.max(390,vp.Y-28))
+    local scale=math.clamp(S.UIScale,.80,1.20)
+    local w=math.min(760,math.max(340,(vp.X-20)/scale))
+    local h=math.min(510,math.max(400,(vp.Y-20)/scale))
     main.Size=UDim2.fromOffset(w,h)
-    if not DRAG.active then
-        main.Position=UDim2.fromOffset((vp.X-w)/2,math.max(14,(vp.Y-h)/2))
+    if not DRAG.active and not S.Open then
+        main.Position=UDim2.fromOffset((vp.X-(w*scale))/2/scale,math.max(14,(vp.Y-(h*scale))/2/scale))
     end
 end
 fitWindow()
-conn(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(fitWindow))
+updateResponsiveLayout()
+conn(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+    fitWindow()
+    updateResponsiveLayout()
+end))
+conn(main:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateResponsiveLayout))
 setPage("Combat")
 search.Text = ""
 refreshVisuals()
