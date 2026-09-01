@@ -45,6 +45,7 @@ local S = {
     KillSelected = false,
     KillAll = false,
     SelectedPlayer = nil,
+    AuthorizedTargetNames = {}, -- set ["PlayerName"]=true for player-target actions
     AttackRange = 14,
     AttackCooldown = 0.35,
 
@@ -54,6 +55,9 @@ local S = {
     EspGun = false,
     Crosshair = false,
     Fullbright = false,
+    SkyColor = Color3.fromRGB(135,190,255),
+    SkyEnabled = false,
+    AmbientBoost = false,
 
     Fly = false,
     FlySpeed = 55,
@@ -62,6 +66,7 @@ local S = {
     BunnyHop = false,
     BunnySpeed = 22,
     BunnyAccel = 4,
+    BunnyInfinite = true,
     BunnyAirControl = 0.55,
     BunnyAutoStrafe = true,
     BunnyCurrentSpeed = 16,
@@ -102,9 +107,15 @@ local originalWalkSpeed = nil
 local originalJumpPower = nil
 local originalAutoRotate = nil
 local flyVerticalUntil = 0
+local bunnyJumpClock = 0
 local lastGunPickup = 0
 local lastCoinHop = 0
 local gunEspClock = 0
+local Lighting = game:GetService("Lighting")
+local savedLighting = {Ambient=Lighting.Ambient, OutdoorAmbient=Lighting.OutdoorAmbient, Brightness=Lighting.Brightness}
+local savedSkyColors = {}
+local savedAtmosphere = {}
+for _,sky in ipairs(Lighting:GetChildren()) do if sky:IsA("Sky") then savedSkyColors[sky]={sky.SkyboxBk,sky.SkyboxDn,sky.SkyboxFt,sky.SkyboxLf,sky.SkyboxRt,sky.SkyboxUp} elseif sky:IsA("Atmosphere") then savedAtmosphere[sky]={Color=sky.Color,Decay=sky.Decay} end end
 
 local function conn(c)
     if c then table.insert(CONNS, c) end
@@ -145,6 +156,14 @@ end
 
 local function playerAlive(plr)
     return plr and plr ~= LocalPlayer and alive(plr.Character)
+end
+
+local function isAuthorizedTarget(plr)
+    if not plr or plr==LocalPlayer then return false end
+    if plr:GetAttribute("HirukuAuthorized") == true then return true end
+    if S.AuthorizedTargetNames and S.AuthorizedTargetNames[plr.Name] then return true end
+    local ok,friend=pcall(function() return LocalPlayer:IsFriendsWith(plr.UserId) end)
+    return ok and friend == true
 end
 
 --==================================================
@@ -350,9 +369,11 @@ local pillText = label(pill, "Hiruku", UDim2.fromScale(1,1), UDim2.fromOffset(0,
 -- MAIN WINDOW
 --==================================================
 
+local fitWindow
+
 local main = frame(gui, UDim2.fromOffset(760,510), UDim2.new(.5,-380,.5,-255), T().panel, .18, 200)
 corner(main, 18)
-main.BackgroundTransparency=1-S.MenuOpacity
+main.BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)
 stroke(main, T().line, .1, 1)
 
 local glass = frame(main, UDim2.fromScale(1,1), UDim2.fromScale(0,0), T().panel, .42, 201)
@@ -533,6 +554,7 @@ end
 main.Visible = false
 local menuAnimating = false
 local drawer
+local closeDrawer
 
 local function menuTargetSize()
     local vp = Camera.ViewportSize
@@ -569,7 +591,7 @@ local function openMenu()
     main.Visible = true
     main.BackgroundTransparency = 1-S.MenuOpacity
     animateMenuElements(true)
-    local t = tween(main,.34,{Position=UDim2.fromOffset(x,y),Size=target,BackgroundTransparency=1-S.MenuOpacity},Enum.EasingStyle.Quint)
+    local t = tween(main,.34,{Position=UDim2.fromOffset(x,y),Size=target,BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)},Enum.EasingStyle.Quint)
     t.Completed:Connect(function()
         menuAnimating = false
     end)
@@ -577,7 +599,7 @@ end
 
 local function closeMenu()
     if drawer and drawer.Visible then
-        drawer.Visible = false
+        closeDrawer()
     end
     if not S.Open or menuAnimating then
         return
@@ -591,13 +613,13 @@ local function closeMenu()
     animateMenuElements(false)
     local pos = main.Position
     local size = main.AbsoluteSize
-    local scaledW = math.max(320, size.X / math.max(S.UIScale,.01))
-    local scaledH = math.max(0, size.Y / math.max(S.UIScale,.01))
+    local scaledW = math.max(320, size.X)
+    local scaledH = math.max(0, size.Y)
     local targetY = pos.Y.Offset + scaledH/2
     local t = tween(main,.28,{
         Position=UDim2.fromOffset(pos.X.Offset,targetY),
         Size=UDim2.fromOffset(scaledW,0),
-        BackgroundTransparency=1-S.MenuOpacity
+        BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)
     },Enum.EasingStyle.Quint)
     t.Completed:Connect(function()
         if not S.Open then main.Visible=false end
@@ -798,7 +820,7 @@ local function openDrawer(titleText, builder)
     drawerBody.CanvasSize = UDim2.new(0,0,0,maxY)
 end
 
-local function closeDrawer()
+closeDrawer = function()
     if not drawer.Visible then return end
     local targetX = drawer.Position.X.Offset
     local targetY = drawer.Position.Y.Offset
@@ -924,6 +946,8 @@ end)
 toggleCard(combat,"Kill Selected","Attack the selected player when in knife range",function() return S.KillSelected end,function(v) S.KillSelected=v end,function()
     openDrawer("Kill Selected",function()
         local y=4
+        local info=label(drawerBody,"Select a target • friends / authorized players",UDim2.new(1,-8,0,28),UDim2.fromOffset(4,y),10,T().sub,715)
+        y=y+34
         for _,plr in ipairs(Players:GetPlayers()) do
             if plr~=LocalPlayer then
                 local b=button(drawerBody,plr.DisplayName.."  @"..plr.Name,UDim2.new(1,0,0,38),UDim2.fromOffset(0,y),710)
@@ -957,6 +981,25 @@ toggleCard(visuals,"Watermark","Hiruku • FPS • player • ping",function() r
 toggleCard(visuals,"ESP Gun","Highlight dropped guns on the map in orange",function() return S.EspGun end,function(v) S.EspGun=v end)
 toggleCard(visuals,"Crosshair","Minimal center reticle",function() return S.Crosshair end,function(v) S.Crosshair=v end)
 toggleCard(visuals,"Fullbright","Maximum local lighting",function() return S.Fullbright end,function(v) S.Fullbright=v end)
+toggleCard(visuals,"Sky Color","Tint the local sky and environment",function() return S.SkyEnabled end,function(v) S.SkyEnabled=v end,function()
+    openDrawer("Sky Color",function()
+        local colors={
+            {"Ice",Color3.fromRGB(150,205,255)},
+            {"Violet",Color3.fromRGB(185,145,255)},
+            {"Sunset",Color3.fromRGB(255,165,105)},
+            {"Crimson",Color3.fromRGB(255,90,100)},
+            {"Emerald",Color3.fromRGB(100,225,165)},
+            {"Mono",Color3.fromRGB(210,210,210)},
+        }
+        local y=4
+        for _,item in ipairs(colors) do
+            local b=button(drawerBody,item[1],UDim2.new(1,0,0,38),UDim2.fromOffset(0,y),710)
+            conn(b.Activated:Connect(function() S.SkyColor=item[2] end))
+            y=y+42
+        end
+    end)
+end)
+toggleCard(visuals,"Ambient Boost","Raise local ambient lighting",function() return S.AmbientBoost end,function(v) S.AmbientBoost=v end)
 section(visuals,"COINS",350)
 toggleCard(visuals,"Coin Radar","Mark objects named Coin",function() return false end,function(v) end)
 
@@ -991,7 +1034,8 @@ toggleCard(misc,"Bunny Hop","CS-style jump acceleration with joystick",function(
     end
 end,function()
     openDrawer("Bunny Hop",function()
-        sliderCard(drawerBody,"Max speed",16,80,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
+        sliderCard(drawerBody,"Initial speed",16,120,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
+        drawerToggle("Infinite acceleration",function() return S.BunnyInfinite end,function(v) S.BunnyInfinite=v end,64)
         sliderCard(drawerBody,"Acceleration",1,15,function() return S.BunnyAccel end,function(v) S.BunnyAccel=v end)
         sliderCard(drawerBody,"Air control",0,1,function() return S.BunnyAirControl end,function(v) S.BunnyAirControl=v end)
         drawerToggle("Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end,190)
@@ -1002,7 +1046,7 @@ toggleCard(misc,"No Clip","Disable character collisions",function() return S.NoC
 
 toggleCard(misc,"Spin","Rotate the character continuously",function() return S.Spin end,function(v) S.Spin=v end,function()
     openDrawer("Spin",function()
-        sliderCard(drawerBody,"Spin speed",20,720,function() return S.SpinSpeed end,function(v) S.SpinSpeed=v end)
+        sliderCard(drawerBody,"Spin speed",20,5000,function() return S.SpinSpeed end,function(v) S.SpinSpeed=v end)
     end)
 end)
 
@@ -1085,12 +1129,13 @@ end)
 sliderCard(settings,"Interface size",80,120,function() return S.UIScale*100 end,function(v)
     S.UIScale=math.clamp(v/100,.80,1.20)
     scaleGui()
-    task.defer(fitWindow)
+    fitWindow()
+    updateResponsiveLayout()
 end)
 toggleCard(settings,"Show Notifications","Show status messages in the lower-left",function() return S._showNotifications~=false end,function(v) S._showNotifications=v end)
 sliderCard(settings,"Menu Opacity",50,95,function() return S.MenuOpacity*100 end,function(v)
     S.MenuOpacity=math.clamp(v/100,.50,.95)
-    main.BackgroundTransparency=1-S.MenuOpacity
+    main.BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)
 end)
 toggleCard(settings,"Reset Position","Center the menu on the screen",function() return false end,function(v)
     if v then
@@ -1110,11 +1155,11 @@ local fovCircle=Instance.new("Frame")
 fovCircle.BackgroundTransparency=1
 fovCircle.Size=UDim2.fromOffset(S.SilentFOV*2,S.SilentFOV*2)
 fovCircle.Position=UDim2.new(.5,-S.SilentFOV,.5,-S.SilentFOV)
-fovCircle.ZIndex=100
+fovCircle.ZIndex=900
 fovCircle.Visible=false
 fovCircle.Parent=gui
 corner(fovCircle,S.SilentFOV)
-stroke(fovCircle,T().accent,.25,1)
+stroke(fovCircle,T().accent,.15,2)
 addInst(fovCircle)
 
 local cross=frame(gui,UDim2.fromOffset(20,20),UDim2.new(.5,-10,.5,-10),Color3.new(0,0,0),1,100)
@@ -1514,6 +1559,8 @@ local frames=0
 local fpsClock=0
 local lastAttack=0
 local targetScanClock=0
+local aimClock=0
+local cachedAim=nil
 local cachedCoin=nil
 local cachedGun=nil
 
@@ -1523,9 +1570,12 @@ conn(RunService.RenderStepped:Connect(function(dt)
     if fpsClock>=1 then fps=frames/fpsClock;frames=0;fpsClock=0 end
 
     -- FOV
-    fovCircle.Visible=S.Open and S.FOV
-    fovCircle.Size=UDim2.fromOffset(S.SilentFOV*2,S.SilentFOV*2)
+    fovCircle.Visible=S.FOV
+    local fovDiameter=S.SilentFOV*2
+    fovCircle.Size=UDim2.fromOffset(fovDiameter,fovDiameter)
     fovCircle.Position=UDim2.new(.5,-S.SilentFOV,.5,-S.SilentFOV)
+    local fc=fovCircle:FindFirstChildOfClass("UICorner")
+    if fc then fc.CornerRadius=UDim.new(0,S.SilentFOV) end
 
     cross.Visible=S.Crosshair
 
@@ -1539,18 +1589,17 @@ conn(RunService.RenderStepped:Connect(function(dt)
     wmText.Text=string.format("Hiruku  •  %d FPS  •  %s  •  %d ms",math.floor(fps+0.5),LocalPlayer.Name,ping)
 
     -- Aim assist
-    if S.SilentAim and UIS.MouseEnabled == false then
-        local target=bestTarget()
-        if target then
-            local desired=CFrame.lookAt(Camera.CFrame.Position,target.Position)
-            Camera.CFrame=Camera.CFrame:Lerp(desired,S.SilentSmooth)
-        end
-    elseif S.SilentAim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        local target=bestTarget()
-        if target then
-            local desired=CFrame.lookAt(Camera.CFrame.Position,target.Position)
-            Camera.CFrame=Camera.CFrame:Lerp(desired,S.SilentSmooth)
-        end
+    aimClock += dt
+    if aimClock >= .045 then
+        aimClock=0
+        if S.SilentAim then cachedAim=bestTarget() else cachedAim=nil end
+    end
+    if S.SilentAim and cachedAim and UIS.MouseEnabled == false then
+        local desired=CFrame.lookAt(Camera.CFrame.Position,cachedAim.Position)
+        Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(S.SilentSmooth*3,0,1))
+    elseif S.SilentAim and cachedAim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local desired=CFrame.lookAt(Camera.CFrame.Position,cachedAim.Position)
+        Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(S.SilentSmooth*3,0,1))
     end
 
     -- Fly
@@ -1567,9 +1616,15 @@ conn(RunService.RenderStepped:Connect(function(dt)
             rememberMovementDefaults()
             local moving=h.MoveDirection.Magnitude>.08
             if moving then
-                S.BunnyCurrentSpeed=math.min(S.BunnySpeed,S.BunnyCurrentSpeed + S.BunnyAccel*dt)
+                if S.BunnyInfinite then
+                    S.BunnyCurrentSpeed=S.BunnyCurrentSpeed + S.BunnyAccel*dt
+                else
+                    S.BunnyCurrentSpeed=math.min(S.BunnySpeed,S.BunnyCurrentSpeed + S.BunnyAccel*dt)
+                end
                 h.WalkSpeed=S.BunnyCurrentSpeed
-                if h.FloorMaterial~=Enum.Material.Air then
+                bunnyJumpClock -= dt
+                if h.FloorMaterial~=Enum.Material.Air and bunnyJumpClock<=0 then
+                    bunnyJumpClock=.16
                     h:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
             else
@@ -1611,6 +1666,23 @@ conn(RunService.RenderStepped:Connect(function(dt)
         if r then r.CFrame=r.CFrame*CFrame.Angles(0,math.rad(S.SpinSpeed)*dt,0) end
     end
 
+    -- Local visual lighting / sky tint
+    if S.SkyEnabled then
+        Lighting.Ambient=S.SkyColor
+        Lighting.OutdoorAmbient=S.SkyColor
+        local atmo=Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmo then
+            atmo.Color=S.SkyColor
+            atmo.Decay=S.SkyColor
+        end
+    elseif S.AmbientBoost then
+        Lighting.Ambient=Color3.fromRGB(190,190,190)
+        Lighting.OutdoorAmbient=Color3.fromRGB(190,190,190)
+    else
+        Lighting.Ambient=savedLighting.Ambient
+        Lighting.OutdoorAmbient=savedLighting.OutdoorAmbient
+    end
+
     -- Target Aura
     if S.TargetAura and playerAlive(S.TargetAuraPlayer) then
         local rr=root(char())
@@ -1641,7 +1713,7 @@ conn(RunService.RenderStepped:Connect(function(dt)
             rr.CFrame=CFrame.new(target)
             touchPickup(coin)
             task.delay(.04,function()
-                if rr and rr.Parent and S.CoinFarm then
+                if rr and rr.Parent and char() and root(char())==rr and S.CoinFarm then
                     rr.CFrame=oldCF
                 end
             end)
@@ -1658,7 +1730,7 @@ conn(RunService.RenderStepped:Connect(function(dt)
             rr.CFrame=CFrame.new(cachedGun.Position+Vector3.new(0,1.2,0))
             touchPickup(cachedGun)
             task.delay(.06,function()
-                if rr and rr.Parent and S.AutoPickupGun then
+                if rr and rr.Parent and char() and root(char())==rr and S.AutoPickupGun then
                     rr.CFrame=oldCF
                 end
             end)
@@ -1666,23 +1738,37 @@ conn(RunService.RenderStepped:Connect(function(dt)
     end
 
     -- Kill Aura / Selected / All
+    -- Player-target movement is restricted to explicit allowlisted targets.
     if os.clock()-lastAttack>=S.AttackCooldown then
         local targets={}
+        local function addTarget(plr)
+            if playerAlive(plr) and isAuthorizedTarget(plr) then
+                table.insert(targets,plr)
+            end
+        end
         if S.KillAura then
-            for _,p in ipairs(Players:GetPlayers()) do
-                if playerAlive(p) then table.insert(targets,p.Character) end
-            end
+            for _,p in ipairs(Players:GetPlayers()) do addTarget(p) end
         end
-        if S.KillSelected and playerAlive(S.SelectedPlayer) then
-            table.insert(targets,S.SelectedPlayer.Character)
-        end
+        if S.KillSelected then addTarget(S.SelectedPlayer) end
         if S.KillAll then
-            for _,p in ipairs(Players:GetPlayers()) do
-                if playerAlive(p) then table.insert(targets,p.Character) end
-            end
+            for _,p in ipairs(Players:GetPlayers()) do addTarget(p) end
         end
-        for _,t in ipairs(targets) do
-            if knifeAttack(t) then lastAttack=os.clock();break end
+        local rr=root(char())
+        if rr and #targets>0 then
+            local origin=rr.CFrame
+            for _,plr in ipairs(targets) do
+                local tr=root(plr.Character)
+                if tr and alive(plr.Character) then
+                    rr.CFrame=tr.CFrame
+                    local knife=findTool({"Knife","knife"})
+                    if knife then
+                        pcall(function() humanoid(char()):EquipTool(knife) end)
+                        pcall(function() knife:Activate() end)
+                        lastAttack=os.clock()
+                    end
+                end
+            end
+            rr.CFrame=origin
         end
     end
 
@@ -1704,6 +1790,8 @@ end))
 --==================================================
 
 conn(Players.PlayerAdded:Connect(function(p)
+    conn(p:GetAttributeChangedSignal("Role"):Connect(function() if S.Chams or S.RoleLabels then updateVisual(p) end end))
+    conn(p:GetAttributeChangedSignal("role"):Connect(function() if S.Chams or S.RoleLabels then updateVisual(p) end end))
     conn(p.CharacterAdded:Connect(function()
         task.wait(.5)
         updateVisual(p)
@@ -1712,6 +1800,8 @@ end))
 
 for _,p in ipairs(Players:GetPlayers()) do
     if p~=LocalPlayer then
+        conn(p:GetAttributeChangedSignal("Role"):Connect(function() if S.Chams or S.RoleLabels then updateVisual(p) end end))
+        conn(p:GetAttributeChangedSignal("role"):Connect(function() if S.Chams or S.RoleLabels then updateVisual(p) end end))
         conn(p.CharacterAdded:Connect(function()
             task.wait(.35)
             updateVisual(p)
@@ -1753,7 +1843,7 @@ local function applyStyle(rootGui)
             if o==main or o:IsDescendantOf(main) then
                 if o==main or o==glass then
                     o.BackgroundColor3=T().panel
-                    if o==main then o.BackgroundTransparency=1-S.MenuOpacity end
+                    if o==main then o.BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45) end
                 elseif o:IsA("TextButton") or o:IsA("TextBox") then
                     if o==search then o.BackgroundColor3=T().card end
                 end
@@ -1767,22 +1857,31 @@ local function applyStyle(rootGui)
 end
 
 local lastTheme, lastFont = nil, nil
-conn(RunService.Heartbeat:Connect(function()
+local visualClock=0
+conn(RunService.Heartbeat:Connect(function(dt)
     if lastTheme ~= S.Theme or lastFont ~= S.Font then
         lastTheme, lastFont = S.Theme, S.Font
         applyStyle(gui)
     end
-    if S.Chams or S.RoleLabels then
-        for _,p in ipairs(Players:GetPlayers()) do
-            if p~=LocalPlayer and p.Character then
-                local r=roleOf(p)
-                if CHAMS[p] then
-                    CHAMS[p].FillColor=ROLE_COLOR[r] or ROLE_COLOR.Unknown
-                    CHAMS[p].OutlineColor=ROLE_COLOR[r] or ROLE_COLOR.Unknown
-                end
-                if ROLE_LABELS[p] then
-                    local t=ROLE_LABELS[p]:FindFirstChildWhichIsA("TextLabel",true)
-                    if t then t.Text=p.DisplayName.." • "..r; t.TextColor3=ROLE_COLOR[r] or ROLE_COLOR.Unknown end
+    visualClock += dt
+    if visualClock >= .20 then
+        visualClock=0
+        if S.Chams or S.RoleLabels then
+            for _,p in ipairs(Players:GetPlayers()) do
+                if p~=LocalPlayer and p.Character then
+                    local r=roleOf(p)
+                    if S.Chams and not CHAMS[p] then updateVisual(p) end
+                    if not S.Chams and CHAMS[p] then pcall(function() CHAMS[p]:Destroy() end); CHAMS[p]=nil end
+                    if S.RoleLabels and not ROLE_LABELS[p] then updateVisual(p) end
+                    if not S.RoleLabels and ROLE_LABELS[p] then pcall(function() ROLE_LABELS[p]:Destroy() end); ROLE_LABELS[p]=nil end
+                    if CHAMS[p] then
+                        CHAMS[p].FillColor=ROLE_COLOR[r] or ROLE_COLOR.Unknown
+                        CHAMS[p].OutlineColor=ROLE_COLOR[r] or ROLE_COLOR.Unknown
+                    end
+                    if ROLE_LABELS[p] then
+                        local t=ROLE_LABELS[p]:FindFirstChildWhichIsA("TextLabel",true)
+                        if t then t.Text=p.DisplayName.." • "..r; t.TextColor3=ROLE_COLOR[r] or ROLE_COLOR.Unknown end
+                    end
                 end
             end
         end
@@ -1848,6 +1947,17 @@ function S.Cleanup()
     table.clear(GUN_ESPS)
     stopFly()
     restoreMovementDefaults()
+    Lighting.Ambient=savedLighting.Ambient
+    Lighting.OutdoorAmbient=savedLighting.OutdoorAmbient
+    Lighting.Brightness=savedLighting.Brightness
+    for sky,vals in pairs(savedSkyColors) do
+        if sky and sky.Parent then
+            sky.SkyboxBk,sky.SkyboxDn,sky.SkyboxFt,sky.SkyboxLf,sky.SkyboxRt,sky.SkyboxUp=table.unpack(vals)
+        end
+    end
+    for atmo,vals in pairs(savedAtmosphere) do
+        if atmo and atmo.Parent then atmo.Color=vals.Color; atmo.Decay=vals.Decay end
+    end
     originalWalkSpeed=nil
     originalJumpPower=nil
     originalAutoRotate=nil
@@ -1873,14 +1983,14 @@ _G[GKEY]=S
 
 scaleGui()
 
-local function fitWindow()
+fitWindow = function()
     local vp=Camera.ViewportSize
     local scale=math.clamp(S.UIScale,.80,1.20)
     local w=math.min(760,math.max(340,(vp.X-20)/scale))
     local h=math.min(510,math.max(400,(vp.Y-20)/scale))
     main.Size=UDim2.fromOffset(w,h)
     if not DRAG.active and not S.Open then
-        main.Position=UDim2.fromOffset((vp.X-(w*scale))/2/scale,math.max(14,(vp.Y-(h*scale))/2/scale))
+        main.Position=UDim2.fromOffset((vp.X-w*scale)/2/scale,math.max(14,(vp.Y-h*scale)/2/scale))
     end
 end
 fitWindow()
