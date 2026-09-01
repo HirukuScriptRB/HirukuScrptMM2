@@ -1,4 +1,5 @@
---// HIRUKU MM2 V11
+--// HIRUKU MM2 V12
+--// Mobile movement, Coin farming, pickup routing and animated typography refresh.
 --// Mobile-first Roblox UI
 --// Features: animated menu, themes, fonts, role-aware visuals, aim assist,
 --// movement utilities, coin collection, weapon pickup, target movement and
@@ -9,7 +10,6 @@ local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
 local Stats = game:GetService("Stats")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
@@ -20,7 +20,7 @@ local Camera = Workspace.CurrentCamera
 -- CONFIG / STATE
 --==================================================
 
-local GKEY = "__HIRUKU_MM2_V11"
+local GKEY = "__HIRUKU_MM2_V12"
 pcall(function()
     if _G[GKEY] and _G[GKEY].Cleanup then
         _G[GKEY].Cleanup()
@@ -60,7 +60,10 @@ local S = {
 
     BunnyHop = false,
     BunnySpeed = 22,
+    BunnyAccel = 4,
+    BunnyAirControl = 0.55,
     BunnyAutoStrafe = true,
+    BunnyCurrentSpeed = 16,
 
     NoClip = false,
     Spin = false,
@@ -348,12 +351,42 @@ corner(frostA,16)
 local frostB = frame(main, UDim2.new(1,-18,1,-18), UDim2.fromOffset(9,9), Color3.fromRGB(255,255,255), .985, 203)
 corner(frostB,14)
 
-local title = label(main, "Hiruku", UDim2.fromOffset(300,34), UDim2.fromOffset(24,20), 23, T().text, 220)
-local version = label(main, "MM2 - v 1.0", UDim2.fromOffset(200,20), UDim2.fromOffset(25,50), 11, T().sub, 220)
+local title = label(main, "Hiruku", UDim2.fromOffset(300,34), UDim2.fromOffset(24,18), 23, T().text, 220)
+local version = label(main, "MM2 - v 1.0", UDim2.fromOffset(220,20), UDim2.fromOffset(25,50), 11, T().sub, 220)
+
+local function addAnimatedTextGradient(obj)
+    local g = Instance.new("UIGradient")
+    g.Name = "HirukuTextGradient"
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255,255,255)),
+        ColorSequenceKeypoint.new(0.28, Color3.fromRGB(220,220,220)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(15,15,15)),
+        ColorSequenceKeypoint.new(0.72, Color3.fromRGB(220,220,220)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255,255,255)),
+    })
+    g.Offset = Vector2.new(-1,0)
+    g.Parent = obj
+    obj.TextStrokeColor3 = Color3.fromRGB(255,255,255)
+    obj.TextStrokeTransparency = 0.82
+    task.spawn(function()
+        while obj.Parent do
+            g.Offset = Vector2.new(-1,0)
+            local tw = TweenService:Create(g,TweenInfo.new(2.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Offset=Vector2.new(1,0)})
+            tw:Play()
+            tw.Completed:Wait()
+            task.wait(.12)
+        end
+    end)
+    return g
+end
+
+addAnimatedTextGradient(title)
+addAnimatedTextGradient(version)
 
 local search = Instance.new("TextBox")
-search.ClearTextOnFocus = false
 search.PlaceholderText = "Search feature..."
+search.ClearTextOnFocus = false
+search.Active = true
 search.Text = ""
 search.TextColor3 = T().text
 search.PlaceholderColor3 = T().sub
@@ -408,9 +441,17 @@ close.TextSize = 22
 -- MOBILE DRAGGING
 --==================================================
 
--- Dedicated title/drag surface. It does not cover the game area.
-local dragArea = frame(main, UDim2.new(1,-95,0,68), UDim2.fromOffset(10,8), Color3.new(0,0,0), 1, 231)
+local dragArea = Instance.new("TextButton")
+dragArea.Name = "DragArea"
+dragArea.Text = ""
+dragArea.AutoButtonColor = false
 dragArea.BackgroundTransparency = 1
+dragArea.Size = UDim2.new(1,-105,0,72)
+dragArea.Position = UDim2.fromOffset(8,5)
+dragArea.ZIndex = 260
+dragArea.Active = true
+dragArea.Selectable = false
+dragArea.Parent = main
 
 local function beginDrag(input)
     if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
@@ -420,24 +461,23 @@ local function beginDrag(input)
     DRAG.origin = main.Position
 end
 
-conn(dragArea.InputBegan:Connect(function(input)
-    if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-    beginDrag(input)
+conn(dragArea.InputBegan:Connect(beginDrag))
+conn(dragArea.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+        DRAG.input = input
+    end
 end))
-
 conn(UIS.InputChanged:Connect(function(input)
-    if not DRAG.active then return end
+    if not DRAG.active or not DRAG.start or not DRAG.origin then return end
     if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-    if not DRAG.start or not DRAG.origin then return end
     local delta = input.Position - DRAG.start
-    main.Position = UDim2.new(
-        DRAG.origin.X.Scale, DRAG.origin.X.Offset + delta.X,
-        DRAG.origin.Y.Scale, DRAG.origin.Y.Offset + delta.Y
-    )
+    local vp = Camera.ViewportSize
+    local x = math.clamp(DRAG.origin.X.Offset + delta.X, -main.AbsoluteSize.X + 80, vp.X - 80)
+    local y = math.clamp(DRAG.origin.Y.Offset + delta.Y, 10, vp.Y - 60)
+    main.Position = UDim2.fromOffset(x,y)
 end))
-
 conn(UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input == DRAG.input or input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         DRAG.active = false
         DRAG.input = nil
         DRAG.start = nil
@@ -468,8 +508,8 @@ end
 --==================================================
 
 main.Visible = false
-main.Size = UDim2.fromOffset(760,0)
-main.Position = UDim2.new(.5,-380,.5,0)
+main.Size = UDim2.fromOffset(main.AbsoluteSize.X,0)
+main.Position = UDim2.fromOffset(main.AbsolutePosition.X,math.max(0,main.AbsolutePosition.Y+main.AbsoluteSize.Y/2))
 
 local function animateMenuElements(show)
     local titleAlpha = show and 0 or 1
@@ -486,18 +526,18 @@ local function openMenu()
     if S.Open then return end
     S.Open = true
     main.Visible = true
-    main.Size = UDim2.fromOffset(760,0)
-    main.Position = UDim2.new(.5,-380,.5,0)
+    main.Size = UDim2.fromOffset(main.AbsoluteSize.X,0)
+    main.Position = UDim2.fromOffset(main.AbsolutePosition.X,math.max(0,main.AbsolutePosition.Y+main.AbsoluteSize.Y/2))
     main.BackgroundTransparency = .18
     animateMenuElements(true)
-    tween(main,.38,{Size=UDim2.fromOffset(760,510),Position=UDim2.new(.5,-380,.5,-255),BackgroundTransparency=.04},Enum.EasingStyle.Quint)
+    tween(main,.38,{Size=UDim2.fromOffset(math.min(760,math.max(320,Camera.ViewportSize.X-28)),math.min(510,math.max(390,Camera.ViewportSize.Y-28))),BackgroundTransparency=.04},Enum.EasingStyle.Quint)
 end
 
 local function closeMenu()
     if not S.Open then return end
     S.Open = false
     animateMenuElements(false)
-    tween(main,.28,{Size=UDim2.fromOffset(760,0),Position=UDim2.new(.5,-380,.5,0),BackgroundTransparency=.18},Enum.EasingStyle.Quint)
+    tween(main,.28,{Size=UDim2.fromOffset(main.AbsoluteSize.X,0),BackgroundTransparency=.18},Enum.EasingStyle.Quint)
     task.delay(.30,function()
         if not S.Open then main.Visible = false end
     end)
@@ -544,14 +584,14 @@ end
 local function toggleCard(parent, name, desc, get, set, settingsFn)
     local key=pageKey(parent)
     local y = pageCursor[key] or 0
-    pageCursor[key]=y+64
+    pageCursor[key]=y+76
     updateCanvas(parent,key)
     table.insert(pageLayout[key] or {}, true)
 
-    local c = frame(parent, UDim2.new(1,-10,0,56), UDim2.fromOffset(5,y), T().card, .02, 235)
+    local c = frame(parent, UDim2.new(1,-10,0,68), UDim2.fromOffset(5,y), T().card, .02, 235)
     corner(c,11)
-    local n = label(c,name,UDim2.new(1,-100,0,22),UDim2.fromOffset(14,7),14,T().text,240)
-    local d = label(c,desc,UDim2.new(1,-105,0,19),UDim2.fromOffset(14,30),10,T().sub,240)
+    local n = label(c,name,UDim2.new(1,-100,0,22),UDim2.fromOffset(14,7),13,T().text,240)
+    local d = label(c,desc,UDim2.new(1,-105,0,19),UDim2.fromOffset(14,34),10,T().sub,240)
     d.TextTruncate = Enum.TextTruncate.AtEnd
 
     local sw = button(c,"",UDim2.fromOffset(44,24),UDim2.new(1,-58,.5,-12),245)
@@ -594,11 +634,11 @@ end
 local function sliderCard(parent, name, min, max, get, set)
     local key=pageKey(parent)
     local y = pageCursor[key] or 0
-    pageCursor[key]=y+64
+    pageCursor[key]=y+76
     updateCanvas(parent,key)
     table.insert(pageLayout[key] or {}, true)
 
-    local c = frame(parent, UDim2.new(1,-10,0,56), UDim2.fromOffset(5,y), T().card, .02,235)
+    local c = frame(parent, UDim2.new(1,-10,0,68), UDim2.fromOffset(5,y), T().card, .02,235)
     corner(c,11)
     local n = label(c,name,UDim2.new(.45,0,1,0),UDim2.fromOffset(14,0),13,T().text,240)
     local value = label(c,"",UDim2.fromOffset(70,20),UDim2.new(1,-84,.5,-10),11,T().sub,240,Enum.TextXAlignment.Right)
@@ -860,16 +900,33 @@ resetPage("Misc")
 local misc=pages.Misc
 section(misc,"MOVEMENT",4)
 
-toggleCard(misc,"Fly","Camera-relative flight",function() return S.Fly end,function(v) S.Fly=v end,function()
+toggleCard(misc,"Fly","Joystick movement + jump to rise",function() return S.Fly end,function(v)
+    S.Fly=v
+    if v then
+        local h=humanoid(char())
+        if h then originalWalkSpeed=h.WalkSpeed end
+    end
+end,function()
     openDrawer("Fly",function()
         sliderCard(drawerBody,"Fly speed",15,120,function() return S.FlySpeed end,function(v) S.FlySpeed=v end)
     end)
 end)
 
-toggleCard(misc,"Bunny Hop","Continuous auto-jump movement",function() return S.BunnyHop end,function(v) S.BunnyHop=v end,function()
+toggleCard(misc,"Bunny Hop","CS-style jump acceleration with joystick",function() return S.BunnyHop end,function(v)
+    S.BunnyHop=v
+    local h=humanoid(char())
+    if v then
+        if h then originalWalkSpeed=h.WalkSpeed end
+        S.BunnyCurrentSpeed=h and h.WalkSpeed or 16
+    elseif h then
+        h.WalkSpeed=originalWalkSpeed or 16
+    end
+end,function()
     openDrawer("Bunny Hop",function()
-        sliderCard(drawerBody,"Hop speed",10,40,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
-        drawerToggle("Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end,62)
+        sliderCard(drawerBody,"Max speed",16,80,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
+        sliderCard(drawerBody,"Acceleration",1,15,function() return S.BunnyAccel end,function(v) S.BunnyAccel=v end)
+        sliderCard(drawerBody,"Air control",0,1,function() return S.BunnyAirControl end,function(v) S.BunnyAirControl=v end)
+        drawerToggle("Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end,190)
     end)
 end)
 
@@ -1216,6 +1273,26 @@ local function findDroppedGun()
     return best
 end
 
+local function touchPickup(part)
+    if not part then return false end
+    local rr=root(char())
+    if not rr then return false end
+    local used=false
+    if type(firetouchinterest)=="function" then
+        pcall(function() firetouchinterest(rr,part,0); firetouchinterest(rr,part,1); used=true end)
+    end
+    local model=part:FindFirstAncestorOfClass("Model") or part
+    local prompt=model and model:FindFirstChildWhichIsA("ProximityPrompt",true)
+    if prompt and prompt.Enabled and type(fireproximityprompt)=="function" then
+        pcall(function() fireproximityprompt(prompt); used=true end)
+    end
+    local click=model and model:FindFirstChildWhichIsA("ClickDetector",true)
+    if click and type(fireclickdetector)=="function" then
+        pcall(function() fireclickdetector(click); used=true end)
+    end
+    return used
+end
+
 --==================================================
 -- MOVEMENT
 --==================================================
@@ -1228,36 +1305,45 @@ local function movementVector()
     return Camera.CFrame.LookVector
 end
 
+local flyJumpHold = 0
+
 local function doFly(dt)
     local r=root(char())
     local h=humanoid(char())
     if not r or not h then return end
+
     local move=h.MoveDirection
     local cf=Camera.CFrame
-    local flatForward=Vector3.new(cf.LookVector.X,0,cf.LookVector.Z)
-    if flatForward.Magnitude<.01 then flatForward=Vector3.new(0,0,-1) end
-    flatForward=flatForward.Unit
-    local flatRight=Vector3.new(cf.RightVector.X,0,cf.RightVector.Z)
-    if flatRight.Magnitude<.01 then flatRight=Vector3.new(1,0,0) end
-    flatRight=flatRight.Unit
-    local inputDir=move
-    local dir=inputDir.Magnitude > .01 and inputDir.Unit or Vector3.zero
-    if inputDir.Magnitude > .01 then
-        local forwardAmount=inputDir:Dot(flatForward)
-        local rightAmount=inputDir:Dot(flatRight)
-        dir=(flatRight*rightAmount + flatForward*forwardAmount)
-        if dir.Magnitude > .01 then dir=dir.Unit end
+    local forward=Vector3.new(cf.LookVector.X,0,cf.LookVector.Z)
+    local right=Vector3.new(cf.RightVector.X,0,cf.RightVector.Z)
+    if forward.Magnitude < .01 then forward=Vector3.new(0,0,-1) end
+    if right.Magnitude < .01 then right=Vector3.new(1,0,0) end
+    forward=forward.Unit
+    right=right.Unit
+
+    local dir=Vector3.zero
+    if move.Magnitude > .01 then
+        local f=move:Dot(forward)
+        local rr=move:Dot(right)
+        dir=(forward*f + right*rr)
+        if dir.Magnitude>.01 then dir=dir.Unit end
     end
-    local vertical=0
-    if UIS:IsKeyDown(Enum.KeyCode.Space) then vertical=1 end
-    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then vertical=-1 end
+
+    -- On mobile the normal jump button is the vertical control.
+    -- Each jump gives a short upward flight window; the joystick controls X/Z.
+    if h.Jump or h:GetState()==Enum.HumanoidStateType.Jumping then
+        flyJumpHold=math.max(flyJumpHold,.38)
+    end
+    flyJumpHold=math.max(0,flyJumpHold-dt)
+    local vertical=flyJumpHold>0 and 1 or 0
 
     local target=dir*S.FlySpeed + Vector3.new(0,vertical*S.FlySpeed,0)
-    r.AssemblyLinearVelocity=r.AssemblyLinearVelocity:Lerp(target,math.clamp(dt*8,0,1))
+    r.AssemblyLinearVelocity=r.AssemblyLinearVelocity:Lerp(target,math.clamp(dt*10,0,1))
     h.PlatformStand=true
 end
 
 local function stopFly()
+    flyJumpHold=0
     local h=humanoid(char())
     local r=root(char())
     if h then h.PlatformStand=false end
@@ -1278,6 +1364,10 @@ local fps=60
 local frames=0
 local fpsClock=0
 local lastAttack=0
+local targetScanClock=0
+local cachedCoin=nil
+local cachedGun=nil
+local originalWalkSpeed=nil
 
 conn(RunService.RenderStepped:Connect(function(dt)
     frames+=1
@@ -1322,17 +1412,37 @@ conn(RunService.RenderStepped:Connect(function(dt)
         stopFly()
     end
 
-    -- Bunny hop
+    -- Bunny hop: mobile joystick + repeated jump, with gradual acceleration.
     if S.BunnyHop then
         local h=humanoid(char())
         if h and h.Health>0 then
-            if h.FloorMaterial~=Enum.Material.Air then
-                h.Jump=true
-                if h.MoveDirection.Magnitude>0 then
-                    h.WalkSpeed=S.BunnySpeed
+            local moving=h.MoveDirection.Magnitude>.05
+            if moving then
+                S.BunnyCurrentSpeed=math.min(S.BunnySpeed,S.BunnyCurrentSpeed + S.BunnyAccel*dt)
+                h.WalkSpeed=S.BunnyCurrentSpeed
+                if h.FloorMaterial~=Enum.Material.Air then
+                    h.Jump=true
                 end
+                if S.BunnyAutoStrafe then
+                    local r=root(char())
+                    if r then
+                        local v=r.AssemblyLinearVelocity
+                        local want=h.MoveDirection.Unit*S.BunnyCurrentSpeed
+                        local air=S.BunnyAirControl
+                        r.AssemblyLinearVelocity=Vector3.new(
+                            v.X+(want.X-v.X)*math.clamp(dt*air*8,0,1),
+                            v.Y,
+                            v.Z+(want.Z-v.Z)*math.clamp(dt*air*8,0,1)
+                        )
+                    end
+                end
+            else
+                S.BunnyCurrentSpeed=16
+                h.WalkSpeed=16
             end
         end
+    else
+        S.BunnyCurrentSpeed=16
     end
 
     -- No clip
@@ -1360,32 +1470,37 @@ conn(RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- Coin Farm
+    targetScanClock += dt
+    if targetScanClock >= 0.12 then
+        targetScanClock = 0
+        if S.CoinFarm then cachedCoin=findNamedNearest("Coin") else cachedCoin=nil end
+        if S.AutoPickupGun then cachedGun=findDroppedGun() else cachedGun=nil end
+    end
+
+    -- Coin Farm: direct CFrame flight ignores normal collision paths and follows Coin objects.
     if S.CoinFarm then
-        local coin=findNamedNearest("Coin")
+        local coin=cachedCoin
         local rr=root(char())
         if coin and rr then
-            local dir=coin.Position-rr.Position
-            if dir.Magnitude>3 then
-                rr.AssemblyLinearVelocity=dir.Unit*S.CoinSpeed
-            else
-                rr.AssemblyLinearVelocity=Vector3.zero
+            for _,part in ipairs(char():GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if part:GetAttribute("HirukuOriginalCollision")==nil then part:SetAttribute("HirukuOriginalCollision",part.CanCollide) end
+                    part.CanCollide=false
+                end
             end
+            local target=coin.Position+Vector3.new(0,1.5,0)
+            local delta=target-rr.Position
+            local alpha=math.clamp(dt*S.CoinSpeed/math.max(delta.Magnitude,1),.04,1)
+            rr.CFrame=CFrame.new(rr.Position:Lerp(target,alpha))
+            rr.AssemblyLinearVelocity=Vector3.zero
+            if delta.Magnitude<5 then touchPickup(coin) end
         end
     end
 
-    -- Auto Pickup Gun
-    if S.AutoPickupGun then
-        local gun=findDroppedGun()
-        local rr=root(char())
-        if gun and rr then
-            local dir=gun.Position-rr.Position
-            if dir.Magnitude>4 then
-                rr.AssemblyLinearVelocity=dir.Unit*math.max(40,S.CoinSpeed)
-            else
-                rr.AssemblyLinearVelocity=Vector3.zero
-            end
-        end
+    -- Auto Pickup Gun: attempt every supported pickup mechanism without requiring the
+    -- character to run toward the dropped weapon.
+    if S.AutoPickupGun and cachedGun then
+        touchPickup(cachedGun)
     end
 
     -- Kill Aura / Selected / All
@@ -1554,9 +1669,17 @@ function S.Cleanup()
     table.clear(CHAMS)
     table.clear(ROLE_LABELS)
     stopFly()
+    local h=humanoid(char())
+    if h then h.WalkSpeed=originalWalkSpeed or 16 end
     if char() then
         for _,p in ipairs(char():GetDescendants()) do
-            if p:IsA("BasePart") then pcall(function() p.CanCollide=true end) end
+            if p:IsA("BasePart") then
+                pcall(function()
+                    local old=p:GetAttribute("HirukuOriginalCollision")
+                    p.CanCollide=(old==nil and true or old)
+                    p:SetAttribute("HirukuOriginalCollision",nil)
+                end)
+            end
         end
     end
     destroyAll()
@@ -1569,6 +1692,18 @@ _G[GKEY]=S
 --==================================================
 
 scaleGui()
+
+local function fitWindow()
+    local vp=Camera.ViewportSize
+    local w=math.min(760,math.max(320,vp.X-28))
+    local h=math.min(510,math.max(390,vp.Y-28))
+    main.Size=UDim2.fromOffset(w,h)
+    if not DRAG.active then
+        main.Position=UDim2.fromOffset((vp.X-w)/2,math.max(14,(vp.Y-h)/2))
+    end
+end
+fitWindow()
+conn(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(fitWindow))
 setPage("Combat")
 search.Text = ""
 refreshVisuals()
