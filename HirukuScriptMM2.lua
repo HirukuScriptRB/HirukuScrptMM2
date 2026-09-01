@@ -312,12 +312,27 @@ uiCorner(search,10)
 
 local nav = newFrame(menu, Color3.new(0,0,0), 1)
 nav.Position = UDim2.new(0,14,0,121)
-nav.Size = UDim2.new(0,112,1,-135)
+nav.Size = UDim2.new(0,126,1,-135)
 nav.ZIndex = 55
 
+-- Keep every navigation item in its own row.
+-- The previous build created the buttons at the same default position,
+-- which made the four sections/icons appear glued together.
+local navLayout = add(Instance.new("UIListLayout"))
+navLayout.FillDirection = Enum.FillDirection.Vertical
+navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+navLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+navLayout.SortOrder = Enum.SortOrder.LayoutOrder
+navLayout.Padding = UDim.new(0,7)
+navLayout.Parent = nav
+
+local navPadding = add(Instance.new("UIPadding"))
+navPadding.PaddingTop = UDim.new(0,2)
+navPadding.Parent = nav
+
 local content = newFrame(menu, Color3.new(0,0,0), 1)
-content.Position = UDim2.new(0,137,0,121)
-content.Size = UDim2.new(1,-151,1,-135)
+content.Position = UDim2.new(0,151,0,121)
+content.Size = UDim2.new(1,-165,1,-135)
 content.ZIndex = 55
 
 -- Imported icon sheet.
@@ -342,8 +357,8 @@ local function icon(parent, tab)
     im.ImageTransparency = .04
     im.ImageRectOffset = ICONS[tab][1]
     im.ImageRectSize = ICONS[tab][2]
-    im.Size = UDim2.new(0,21,0,21)
-    im.Position = UDim2.new(0,7,.5,-10)
+    im.Size = UDim2.new(0,22,0,22)
+    im.Position = UDim2.new(0,8,.5,-11)
     im.Parent = parent
     return im
 end
@@ -370,9 +385,10 @@ local function page(name)
     return p
 end
 
-for _, name in ipairs(tabs) do
+for order, name in ipairs(tabs) do
     local b = mkButton(nav)
-    b.Size = UDim2.new(1,0,0,36)
+    b.LayoutOrder = order
+    b.Size = UDim2.new(1,0,0,39)
     b.ZIndex = 58
     b.BackgroundColor3 = Color3.fromRGB(25,25,25)
     b.BackgroundTransparency = 1
@@ -382,8 +398,8 @@ for _, name in ipairs(tabs) do
     icon(b,name)
 
     local tx = text(b,name,11,Enum.Font.GothamMedium)
-    tx.Position = UDim2.new(0,34,0,0)
-    tx.Size = UDim2.new(1,-38,1,0)
+    tx.Position = UDim2.new(0,38,0,0)
+    tx.Size = UDim2.new(1,-42,1,0)
     tx.TextColor3 = Color3.fromRGB(145,145,145)
 
     tabButtons[name] = {button=b,label=tx}
