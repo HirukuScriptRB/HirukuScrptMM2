@@ -11,9 +11,12 @@
       • Role-aware visual debugger with tool/attribute detection
       • Watermark with FPS / player / ping
       • Rerun-safe cleanup
+      • MM2 QA utilities: coin radar, test-coin route, crosshair, fullbright, anti-AFK
 
     IMPORTANT:
-      Combat automation against real public MM2 players is not included.
+      Public-player combat automation and public coin farming are not included.
+      Test Coin Farm only moves to objects explicitly marked HirukuTestCoin or placed
+      under workspace.HirukuTestCoins for controlled private QA.
       The combat controls below are wired as private-test target tools so the
       interface can be QA-tested without automating attacks against players.
 ]]
@@ -110,7 +113,6 @@ local function cleanup()
     for _, x in pairs(S.labels) do
         pcall(function() x:Destroy() end)
     end
-
     local c = LocalPlayer.Character
     if c then
         for _,part in ipairs(c:GetDescendants()) do
@@ -249,7 +251,9 @@ pill.TextColor3 = Color3.fromRGB(245,245,245)
 pill.TextSize = 15
 pill.Font = Enum.Font.GothamBold
 pill.AutoButtonColor = false
-pill.ZIndex = 1000
+pill.Active = true
+pill.Modal = true
+pill.ZIndex = 1200
 pill.Parent = gui
 uiCorner(pill,20)
 uiStroke(pill,.78)
@@ -261,7 +265,7 @@ menu.AnchorPoint = Vector2.new(.5,.5)
 menu.Position = UDim2.fromScale(.5,.52)
 menu.Size = UDim2.new(0,610,0,410)
 menu.Visible = false
-menu.ZIndex = 980
+menu.ZIndex = 1190
 menu.Active = true
 uiCorner(menu,16)
 uiStroke(menu,.84)
@@ -270,25 +274,27 @@ uiStroke(menu,.84)
 -- Roblox's normal BlurEffect affects the entire viewport, so it is not used.
 local blurLayer = newFrame(menu, Color3.fromRGB(40,40,40), .82)
 blurLayer.Size = UDim2.fromScale(1,1)
-blurLayer.ZIndex = 51
+blurLayer.ZIndex = 0
 uiCorner(blurLayer,16)
 
 local topGlow = newFrame(menu, Color3.fromRGB(255,255,255), .965)
 topGlow.Position = UDim2.new(0,1,0,1)
 topGlow.Size = UDim2.new(1,-2,0,85)
-topGlow.ZIndex = 52
+topGlow.ZIndex = 1
 uiCorner(topGlow,15)
 
 local header = newFrame(menu, Color3.fromRGB(0,0,0), 1)
 header.Size = UDim2.new(1,0,0,112)
-header.ZIndex = 996
+header.ZIndex = 1202
 
 local title = text(header,"Hiruku",21,Enum.Font.GothamBold)
 title.Position = UDim2.new(0,20,0,13)
+title.ZIndex=1003
 title.Size = UDim2.new(1,-40,0,28)
 
 local subtitle = text(header,"MM2 - v 1.0",10,Enum.Font.GothamMedium)
 subtitle.Position = UDim2.new(0,21,0,42)
+subtitle.ZIndex=1003
 subtitle.Size = UDim2.new(1,-42,0,17)
 
 local sg = add(Instance.new("UIGradient"))
@@ -318,26 +324,26 @@ search.TextSize = 11
 search.Font = Enum.Font.Gotham
 search.ClearTextOnFocus = false
 search.Active = true
-search.ZIndex = 998
+search.ZIndex = 1203
 search.Parent = menu
 uiCorner(search,10)
 
 local nav = newFrame(menu, Color3.new(0,0,0), 1)
 nav.Position = UDim2.new(0,14,0,121)
 nav.Size = UDim2.new(0,145,1,-135)
-nav.ZIndex = 1005
+nav.ZIndex = 1205
 
 local content = newFrame(menu, Color3.new(0,0,0), 1)
 content.Position = UDim2.new(0,170,0,121)
 content.Size = UDim2.new(1,-184,1,-135)
-content.ZIndex = 1000
+content.ZIndex = 1204
 
 local ICON_SHEET = "rbxassetid://3926305904"
 local ICONS = {
-    Combat={Vector2.new(324,44),Vector2.new(36,36)},
-    Visuals={Vector2.new(564,44),Vector2.new(36,36)},
-    Misc={Vector2.new(204,44),Vector2.new(36,36)},
-    Settings={Vector2.new(444,44),Vector2.new(36,36)},
+    Combat={Vector2.new(804,4),Vector2.new(36,36)}, -- sword / military-style icon
+    Visuals={Vector2.new(204,444),Vector2.new(36,36)}, -- eye / visibility-style icon
+    Misc={Vector2.new(764,764),Vector2.new(36,36)}, -- more / three dots
+    Settings={Vector2.new(4,4),Vector2.new(36,36)}, -- settings / gear
 }
 local tabs={"Combat","Visuals","Misc","Settings"}
 local pages={}
@@ -352,7 +358,7 @@ local function icon(parent,tab)
     im.ImageRectSize=ICONS[tab][2]
     im.Size=UDim2.new(0,24,0,24)
     im.Position=UDim2.new(0,7,.5,-12)
-    im.ZIndex=994
+    im.ZIndex=1013
     im.Parent=parent
     return im
 end
@@ -367,30 +373,42 @@ local function page(name)
     p.AutomaticCanvasSize=Enum.AutomaticSize.Y
     p.CanvasSize=UDim2.new()
     p.Visible=false
-    p.ZIndex=1001
+    p.ZIndex=1011
+    p.Active=true
     p.Parent=content
     local l=add(Instance.new("UIListLayout"))
-    l.Padding=UDim.new(0,7)
+    l.Padding=UDim.new(0,9)
+    l.SortOrder=Enum.SortOrder.LayoutOrder
     l.Parent=p
+    local pad=add(Instance.new("UIPadding"))
+    pad.PaddingTop=UDim.new(0,2)
+    pad.PaddingBottom=UDim.new(0,10)
+    pad.Parent=p
     pages[name]=p
     return p
 end
 
+local navLayout=add(Instance.new("UIListLayout"))
+navLayout.Padding=UDim.new(0,9)
+navLayout.SortOrder=Enum.SortOrder.LayoutOrder
+navLayout.Parent=nav
 for order,name in ipairs(tabs) do
     local b=mkButton(nav)
+    b.LayoutOrder=order
     b.Size=UDim2.new(1,0,0,40)
-    b.Position=UDim2.new(0,0,0,(order-1)*48)
-    b.ZIndex=1007
+    b.ZIndex=1012
     b.BackgroundColor3=Color3.fromRGB(25,25,25)
     b.BackgroundTransparency=1
     b.Parent=nav
+    b.Active=true
+    b.Modal=true
     uiCorner(b,9)
     icon(b,name)
     local tx=text(b,name,11,Enum.Font.GothamMedium)
     tx.Position=UDim2.new(0,40,0,0)
     tx.Size=UDim2.new(1,-45,1,0)
-    tx.TextColor3=Color3.fromRGB(145,145,145)
-    tx.ZIndex=995
+    tx.TextColor3=Color3.fromRGB(170,170,170)
+    tx.ZIndex=1013
     tabButtons[name]={button=b,label=tx}
     page(name)
 end
@@ -409,53 +427,54 @@ end
 local function card(parent, name, desc, callback, settingsCallback)
     local row = newFrame(parent,Color3.fromRGB(23,23,23),.06)
     row.Size = UDim2.new(1,0,0,57)
-    row.ZIndex=58
+    row.ZIndex=1012
     uiCorner(row,10)
 
     local n=text(row,name,12,Enum.Font.GothamMedium)
     n.Position=UDim2.new(0,13,0,8)
     n.Size=UDim2.new(1,-105,0,18)
-    n.ZIndex=59
+    n.ZIndex=1013
 
     local d=text(row,desc or "",9,Enum.Font.Gotham)
     d.Position=UDim2.new(0,13,0,30)
     d.Size=UDim2.new(1,-105,0,16)
     d.TextColor3=Color3.fromRGB(105,105,105)
-    d.ZIndex=59
+    d.ZIndex=1013
 
     if settingsCallback then
         local sb=mkButton(row)
         sb.Size=UDim2.new(0,24,0,24)
         sb.Position=UDim2.new(1,-79,.5,-12)
-        sb.ZIndex=61
+        sb.ZIndex=1014
 
         local si=add(Instance.new("ImageLabel"))
         si.BackgroundTransparency=1
         si.Image=ICON_SHEET
         si.ImageColor3=Color3.fromRGB(125,125,125)
-        si.ImageRectOffset=Vector2.new(444,44)
+        si.ImageRectOffset=Vector2.new(4,4)
         si.ImageRectSize=Vector2.new(36,36)
         si.Size=UDim2.fromScale(1,1)
+        si.ZIndex=1015
         si.Parent=sb
-        conn(sb.MouseButton1Click:Connect(settingsCallback))
+        conn(sb.Activated:Connect(settingsCallback))
     end
 
     local sw=mkButton(row)
     sw.Size=UDim2.new(0,42,0,22)
     sw.Position=UDim2.new(1,-52,.5,-11)
     sw.BackgroundColor3=Color3.fromRGB(48,48,48)
-    sw.ZIndex=61
+    sw.ZIndex=1014
     sw.Parent=row
     uiCorner(sw,12)
 
     local dot=newFrame(sw,Color3.fromRGB(180,180,180),0)
     dot.Size=UDim2.new(0,16,0,16)
     dot.Position=UDim2.new(0,3,.5,-8)
-    dot.ZIndex=62
+    dot.ZIndex=1015
     uiCorner(dot,8)
 
     local on=false
-    conn(sw.MouseButton1Click:Connect(function()
+    conn(sw.Activated:Connect(function()
         on=not on
         tw(sw,.17,{BackgroundColor3=on and Color3.fromRGB(225,225,225) or Color3.fromRGB(48,48,48)})
         tw(dot,.17,{
@@ -472,7 +491,7 @@ local function heading(parent, value)
     local x=text(parent,value,10,Enum.Font.GothamBold)
     x.Size=UDim2.new(1,0,0,22)
     x.TextColor3=Color3.fromRGB(115,115,115)
-    x.ZIndex=59
+    x.ZIndex=1013
     return x
 end
 
@@ -482,7 +501,7 @@ drawer.Size=UDim2.new(0,330,0,0)
 drawer.AnchorPoint=Vector2.new(1,.5)
 drawer.Position=UDim2.new(1,-16,.5,0)
 drawer.Visible=false
-drawer.ZIndex=1100
+drawer.ZIndex=1300
 uiCorner(drawer,14)
 uiStroke(drawer,.84)
 
@@ -588,7 +607,7 @@ local function settingToggle(parent,name,get,set)
     dot.Position=get() and UDim2.new(1,-19,.5,-8) or UDim2.new(0,3,.5,-8)
     uiCorner(dot,8)
 
-    conn(b.MouseButton1Click:Connect(function()
+    conn(b.Activated:Connect(function()
         local v=not get()
         set(v)
         tw(b,.17,{BackgroundColor3=v and Color3.fromRGB(225,225,225) or Color3.fromRGB(48,48,48)})
@@ -611,7 +630,7 @@ local function closeDrawer()
     end)
 end
 
-conn(drawerClose.MouseButton1Click:Connect(closeDrawer))
+conn(drawerClose.Activated:Connect(closeDrawer))
 
 local openMovementDrawer
 local openAimDrawer
@@ -633,6 +652,8 @@ openMovementDrawer = function(mode)
         settingToggle(drawerBody,"Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end)
     elseif mode=="Spin" then
         settingSlider(drawerBody,"Spin speed",1,30,function() return S.SpinSpeed end,function(v) S.SpinSpeed=v end)
+    elseif mode=="Test Coin Farm" then
+        settingSlider(drawerBody,"Test farm speed",20,160,function() return S.CoinFarmSpeed end,function(v) S.CoinFarmSpeed=v end)
     end
     openDrawer()
 end
@@ -713,7 +734,7 @@ local function rebuildTargets()
             b.TextXAlignment=Enum.TextXAlignment.Left
             b.Parent=targetScroll
             uiCorner(b,7)
-            conn(b.MouseButton1Click:Connect(function()
+            conn(b.Activated:Connect(function()
                 S.selected=m
                 rebuildTargets()
             end))
@@ -762,6 +783,17 @@ card(pages.Misc,"Spin","Continuous character rotation",function(v) S.Spin=v end,
 heading(pages.Misc,"TARGET MOVEMENT TEST")
 card(pages.Misc,"Sex Aura","Target movement tester for authorized targets",function(v) S.TargetMovement=v end)
 
+-- Additional MM2 QA / utility features
+heading(pages.Visuals,"MM2 UTILITIES")
+card(pages.Visuals,"Coin Radar","Highlight nearby test coins without collecting them",function(v) S.CoinRadar=v end)
+card(pages.Visuals,"Crosshair","Minimal center crosshair for testing",function(v) S.Crosshair=v end)
+card(pages.Visuals,"Fullbright","Local lighting test mode",function(v) S.Fullbright=v end)
+
+heading(pages.Misc,"MM2 ROUND / QA")
+card(pages.Misc,"Anti AFK","Keep the test client active",function(v) S.AntiAFK=v end)
+card(pages.Misc,"Round Info","Show local round/player state",function(v) S.RoundInfo=v end)
+card(pages.Misc,"Test Coin Farm","Moves only to coins explicitly marked HirukuTestCoin",function(v) S.TestCoinFarm=v end,function() openMovementDrawer("Test Coin Farm") end)
+
 -- Settings
 heading(pages.Settings,"INTERFACE")
 card(pages.Settings,"Language","English / Russian",function()
@@ -809,11 +841,11 @@ local function updateScale()
     sizeValue.Text=("%d%%"):format(math.floor(S.UIScale*100))
 end
 
-conn(minus.MouseButton1Click:Connect(function()
+conn(minus.Activated:Connect(function()
     S.UIScale=math.clamp(S.UIScale-.1,.75,1.35)
     updateScale()
 end))
-conn(plus.MouseButton1Click:Connect(function()
+conn(plus.Activated:Connect(function()
     S.UIScale=math.clamp(S.UIScale+.1,.75,1.35)
     updateScale()
 end))
@@ -834,8 +866,8 @@ dragSurface.Text=""
 dragSurface.AutoButtonColor=false
 dragSurface.Active=true
 dragSurface.Modal=false
-dragSurface.Size=UDim2.fromScale(1,1)
-dragSurface.ZIndex=981
+dragSurface.Size=UDim2.new(1,0,0,58)
+dragSurface.ZIndex=1001
 dragSurface.Parent=menu
 
 local function makeDraggable(obj,handle)
@@ -880,7 +912,7 @@ local function setMenu(v)
     end
 end
 
-conn(pill.MouseButton1Click:Connect(function()
+conn(pill.Activated:Connect(function()
     setMenu(not S.menu)
 end))
 
@@ -919,6 +951,22 @@ conn(flyUp.MouseButton1Down:Connect(function() S.FlyVertical=1 end))
 conn(flyUp.MouseButton1Up:Connect(function() if S.FlyVertical==1 then S.FlyVertical=0 end end))
 conn(flyDown.MouseButton1Down:Connect(function() S.FlyVertical=-1 end))
 conn(flyDown.MouseButton1Up:Connect(function() if S.FlyVertical==-1 then S.FlyVertical=0 end end))
+
+-- Minimal crosshair
+local crosshair=add(Instance.new("Frame"))
+crosshair.BackgroundTransparency=1
+crosshair.AnchorPoint=Vector2.new(.5,.5)
+crosshair.Position=UDim2.fromScale(.5,.5)
+crosshair.Size=UDim2.fromOffset(22,22)
+crosshair.ZIndex=1250
+crosshair.Visible=false
+crosshair.Parent=gui
+local chH=newFrame(crosshair,Color3.fromRGB(235,235,235),0)
+chH.Position=UDim2.new(0,0,.5,-1)
+chH.Size=UDim2.new(1,0,0,2)
+local chV=newFrame(crosshair,Color3.fromRGB(235,235,235),0)
+chV.Position=UDim2.new(.5,-1,0,0)
+chV.Size=UDim2.new(0,2,1,0)
 
 -- FOV
 local fov=newFrame(gui,Color3.new(0,0,0),1)
@@ -1128,6 +1176,8 @@ local function getPing()
     return "—"
 end
 
+local Lighting=game:GetService("Lighting")
+local savedLighting={Brightness=Lighting.Brightness,ClockTime=Lighting.ClockTime,FogEnd=Lighting.FogEnd,GlobalShadows=Lighting.GlobalShadows}
 local frames=0
 local lastFps=os.clock()
 local fps=60
@@ -1141,6 +1191,18 @@ conn(RunService.RenderStepped:Connect(function()
         lastFps=now
     end
 
+    crosshair.Visible=S.Crosshair
+    if S.Fullbright then
+        Lighting.Brightness=2
+        Lighting.ClockTime=14
+        Lighting.FogEnd=100000
+        Lighting.GlobalShadows=false
+    else
+        Lighting.Brightness=savedLighting.Brightness
+        Lighting.ClockTime=savedLighting.ClockTime
+        Lighting.FogEnd=savedLighting.FogEnd
+        Lighting.GlobalShadows=savedLighting.GlobalShadows
+    end
     if S.Watermark then
         local parts={"Hiruku"}
         if S.WatermarkFPS then table.insert(parts,tostring(fps).." FPS") end
@@ -1179,8 +1241,78 @@ conn(search:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end))
 
+-- Safe private-test coin helpers. Only objects with HirukuTestCoin=true or
+-- objects inside workspace.HirukuTestCoins are eligible. Public MM2 coins are ignored.
+local coinHighlights={}
+for _,x in pairs(S.instances) do
+    if x.Name=="HirukuCoinRadar" then pcall(function() x:Destroy() end) end
+end
+local function isTestCoin(obj)
+    if not obj then return false end
+    if obj:GetAttribute("HirukuTestCoin") == true then return true end
+    local folder=workspace:FindFirstChild("HirukuTestCoins")
+    return folder and obj:IsDescendantOf(folder)
+end
+local function coinPosition(obj)
+    if obj:IsA("BasePart") then return obj.Position end
+    if obj:IsA("Model") then
+        local pp=obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true)
+        return pp and pp.Position
+    end
+end
+local function nearestTestCoin(root)
+    local best,bestD=nil,math.huge
+    local folder=workspace:FindFirstChild("HirukuTestCoins")
+    if folder then
+        for _,obj in ipairs(folder:GetDescendants()) do
+            if (obj:IsA("BasePart") or obj:IsA("Model")) and isTestCoin(obj) then
+                local pos=coinPosition(obj)
+                if pos then
+                    local d=(pos-root.Position).Magnitude
+                    if d<bestD then best,bestD=obj,d end
+                end
+            end
+        end
+    end
+    for _,obj in ipairs(workspace:GetDescendants()) do
+        if obj:GetAttribute("HirukuTestCoin") == true then
+            local pos=coinPosition(obj)
+            if pos then
+                local d=(pos-root.Position).Magnitude
+                if d<bestD then best,bestD=obj,d end
+            end
+        end
+    end
+    return best,bestD
+end
+local function updateCoinRadar(root)
+    if not S.CoinRadar then
+        for obj,h in pairs(coinHighlights) do pcall(function() h:Destroy() end); coinHighlights[obj]=nil end
+        return
+    end
+    for obj,h in pairs(coinHighlights) do
+        if not obj.Parent then pcall(function() h:Destroy() end); coinHighlights[obj]=nil end
+    end
+    local folder=workspace:FindFirstChild("HirukuTestCoins")
+    if not folder then return end
+    for _,obj in ipairs(folder:GetChildren()) do
+        if isTestCoin(obj) and not coinHighlights[obj] then
+            local h=add(Instance.new("Highlight"))
+            h.Name="HirukuCoinRadar"
+            h.Adornee=obj:IsA("Model") and obj or nil
+            h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+            h.FillColor=Color3.fromRGB(245,245,245)
+            h.OutlineColor=Color3.fromRGB(180,180,180)
+            h.FillTransparency=.55
+            h.Parent=gui
+            coinHighlights[obj]=h
+        end
+    end
+end
+
 -- Main loop
 local roleTick=0
+local antiAFKTick=0
 
 conn(RunService.Heartbeat:Connect(function(dt)
     if not S.alive then return end
@@ -1190,6 +1322,16 @@ conn(RunService.Heartbeat:Connect(function(dt)
         updateFov()
     else
         fov.Visible=false
+    end
+
+    antiAFKTick+=dt
+    if S.AntiAFK and antiAFKTick>=45 then
+        antiAFKTick=0
+        pcall(function()
+            local vu=game:GetService("VirtualUser")
+            vu:CaptureController()
+            vu:ClickButton2(Vector2.new())
+        end)
     end
 
     roleTick+=dt
@@ -1270,6 +1412,17 @@ conn(RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
+
+    if S.TestCoinFarm then
+        local coin=nearestTestCoin(root)
+        local pos=coin and coinPosition(coin)
+        if pos then
+            -- Direct movement is intentionally limited to the private HirukuTestCoins set.
+            root.CFrame=CFrame.new(pos + Vector3.new(0,2.5,0), pos)
+        end
+    end
+
+    updateCoinRadar(root)
 end))
 
 -- Notification
