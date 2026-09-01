@@ -1,4 +1,4 @@
---// HIRUKU MM2
+--// HIRUKU MM2 V10
 --// Mobile-first Roblox UI
 --// Features: animated menu, themes, fonts, role-aware visuals, aim assist,
 --// movement utilities, coin collection, weapon pickup, target movement and
@@ -362,11 +362,13 @@ search.Parent = main
 corner(search,19)
 
 local nav = frame(main, UDim2.fromOffset(168,340), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 220)
+corner(nav,12)
 local content = frame(main, UDim2.new(1,-210,1,-150), UDim2.fromOffset(194,135), Color3.new(0,0,0), 1, 220)
 
 local pages = {}
 local navButtons = {}
 local pageLayout = {}
+local pageCursor = {}
 
 local pageNames = {"Combat","Visuals","Misc","Settings"}
 
@@ -374,8 +376,22 @@ for i, name in ipairs(pageNames) do
     local y = (i-1)*72
     local nb = button(nav, name, UDim2.new(1,-8,0,56), UDim2.fromOffset(4,y), 230)
     navButtons[name] = nb
-    pages[name] = frame(content, UDim2.fromScale(1,1), UDim2.fromOffset(0,0), Color3.new(0,0,0), 1, 225)
+
+    local pg = Instance.new("ScrollingFrame")
+    pg.Name = name .. "Page"
+    pg.BackgroundTransparency = 1
+    pg.BorderSizePixel = 0
+    pg.Size = UDim2.fromScale(1,1)
+    pg.Position = UDim2.fromOffset(0,0)
+    pg.ScrollBarThickness = 3
+    pg.ScrollBarImageTransparency = .35
+    pg.CanvasSize = UDim2.new(0,0,0,0)
+    pg.ScrollingDirection = Enum.ScrollingDirection.Y
+    pg.ZIndex = 225
+    pg.Parent = content
+    pages[name] = pg
     pageLayout[name] = {}
+    pageCursor[name] = 0
 end
 
 local close = button(main, "×", UDim2.fromOffset(38,38), UDim2.new(1,-58,0,18), 230)
@@ -385,38 +401,37 @@ close.TextSize = 22
 -- MOBILE DRAGGING
 --==================================================
 
-local function pointInside(guiObject, p)
-    local ap = guiObject.AbsolutePosition
-    local as = guiObject.AbsoluteSize
-    return p.X >= ap.X and p.X <= ap.X+as.X and p.Y >= ap.Y and p.Y <= ap.Y+as.Y
+-- Dedicated title/drag surface. It does not cover the game area.
+local dragArea = frame(main, UDim2.new(1,-95,0,68), UDim2.fromOffset(10,8), Color3.new(0,0,0), 1, 215)
+dragArea.BackgroundTransparency = 1
+
+local function beginDrag(input)
+    if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+    DRAG.active = true
+    DRAG.input = input
+    DRAG.start = input.Position
+    DRAG.origin = main.Position
 end
 
-local dragArea = frame(main, UDim2.new(1,-95,0,68), UDim2.fromOffset(10,8), Color3.new(0,0,0), 1, 215)
-
-conn(dragArea.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        DRAG.active = true
-        DRAG.input = input
-        DRAG.start = input.Position
-        DRAG.origin = main.Position
-    end
-end))
+conn(dragArea.InputBegan:Connect(beginDrag))
 
 conn(UIS.InputChanged:Connect(function(input)
-    if not DRAG.active or input ~= DRAG.input and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - DRAG.start
-        main.Position = UDim2.new(
-            DRAG.origin.X.Scale, DRAG.origin.X.Offset + delta.X,
-            DRAG.origin.Y.Scale, DRAG.origin.Y.Offset + delta.Y
-        )
-    end
+    if not DRAG.active then return end
+    if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+    if not DRAG.start or not DRAG.origin then return end
+    local delta = input.Position - DRAG.start
+    main.Position = UDim2.new(
+        DRAG.origin.X.Scale, DRAG.origin.X.Offset + delta.X,
+        DRAG.origin.Y.Scale, DRAG.origin.Y.Offset + delta.Y
+    )
 end))
 
 conn(UIS.InputEnded:Connect(function(input)
-    if input == DRAG.input or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         DRAG.active = false
         DRAG.input = nil
+        DRAG.start = nil
+        DRAG.origin = nil
     end
 end))
 
@@ -446,20 +461,34 @@ main.Visible = false
 main.Size = UDim2.fromOffset(760,0)
 main.Position = UDim2.new(.5,-380,.5,0)
 
+local function animateMenuElements(show)
+    local titleAlpha = show and 0 or 1
+    local versionAlpha = show and .05 or 1
+    tween(title,.24,{TextTransparency=titleAlpha},Enum.EasingStyle.Quart)
+    tween(version,.24,{TextTransparency=versionAlpha},Enum.EasingStyle.Quart)
+    tween(search,.26,{BackgroundTransparency=show and .08 or 1,TextTransparency=show and 0 or 1},Enum.EasingStyle.Quart)
+    for _,b in pairs(navButtons) do
+        tween(b,.26,{BackgroundTransparency=show and 0 or 1,TextTransparency=show and 0 or 1},Enum.EasingStyle.Quart)
+    end
+end
+
 local function openMenu()
     if S.Open then return end
     S.Open = true
     main.Visible = true
     main.Size = UDim2.fromOffset(760,0)
     main.Position = UDim2.new(.5,-380,.5,0)
-    tween(main,.34,{Size=UDim2.fromOffset(760,510),Position=UDim2.new(.5,-380,.5,-255)},Enum.EasingStyle.Quint)
+    main.BackgroundTransparency = .18
+    animateMenuElements(true)
+    tween(main,.38,{Size=UDim2.fromOffset(760,510),Position=UDim2.new(.5,-380,.5,-255),BackgroundTransparency=.04},Enum.EasingStyle.Quint)
 end
 
 local function closeMenu()
     if not S.Open then return end
     S.Open = false
-    local tw = tween(main,.26,{Size=UDim2.fromOffset(760,0),Position=UDim2.new(.5,-380,.5,0)},Enum.EasingStyle.Quint)
-    task.delay(.28,function()
+    animateMenuElements(false)
+    tween(main,.28,{Size=UDim2.fromOffset(760,0),Position=UDim2.new(.5,-380,.5,0),BackgroundTransparency=.18},Enum.EasingStyle.Quint)
+    task.delay(.30,function()
         if not S.Open then main.Visible = false end
     end)
 end
@@ -475,15 +504,39 @@ conn(close.Activated:Connect(closeMenu))
 -- CARD / TOGGLE / SLIDER
 --==================================================
 
+local function pageKey(parent)
+    if parent == drawerBody then return "__drawer" end
+    for name, pg in pairs(pages) do
+        if pg == parent then return name end
+    end
+    return S.Page
+end
+
+local function updateCanvas(parent,key)
+    if pages[key] then
+        pages[key].CanvasSize = UDim2.new(0,0,0,(pageCursor[key] or 0)+12)
+    elseif parent == drawerBody then
+        drawerBody.CanvasSize = UDim2.new(0,0,0,(pageCursor[key] or 0)+12)
+    end
+end
+
 local function section(parent, text, y)
-    local h = label(parent,text,UDim2.new(1,-10,0,22),UDim2.fromOffset(5,y),11,T().sub,240)
+    local key=pageKey(parent)
+    pageCursor[key]=(pageCursor[key] or 0)+8
+    local yy=pageCursor[key]
+    local h = label(parent,text,UDim2.new(1,-10,0,22),UDim2.fromOffset(5,yy),11,T().sub,240)
     h.TextTransparency = .05
+    pageCursor[key]=yy+30
+    if pages[key] then pages[key].CanvasSize=UDim2.new(0,0,0,pageCursor[key]+12) end
     return h
 end
 
 local function toggleCard(parent, name, desc, get, set, settingsFn)
-    local y = #pageLayout[S.Page]*64
-    table.insert(pageLayout[S.Page], true)
+    local key=pageKey(parent)
+    local y = pageCursor[key] or 0
+    pageCursor[key]=y+64
+    updateCanvas(parent,key)
+    table.insert(pageLayout[key] or {}, true)
 
     local c = frame(parent, UDim2.new(1,-10,0,56), UDim2.fromOffset(5,y), T().card, .02, 235)
     corner(c,11)
@@ -529,8 +582,11 @@ local function toggleCard(parent, name, desc, get, set, settingsFn)
 end
 
 local function sliderCard(parent, name, min, max, get, set)
-    local y = #pageLayout[S.Page]*64
-    table.insert(pageLayout[S.Page], true)
+    local key=pageKey(parent)
+    local y = pageCursor[key] or 0
+    pageCursor[key]=y+64
+    updateCanvas(parent,key)
+    table.insert(pageLayout[key] or {}, true)
 
     local c = frame(parent, UDim2.new(1,-10,0,56), UDim2.fromOffset(5,y), T().card, .02,235)
     corner(c,11)
@@ -591,12 +647,27 @@ drawer.Visible = false
 
 local drawerTitle = label(drawer,"Settings",UDim2.new(1,-60,0,32),UDim2.fromOffset(18,15),17,T().text,710)
 local drawerClose = button(drawer,"×",UDim2.fromOffset(32,32),UDim2.new(1,-47,0,12),710)
-local drawerBody = frame(drawer,UDim2.new(1,-24,1,-62),UDim2.fromOffset(12,54),Color3.new(0,0,0),1,705)
+local drawerBody = Instance.new("ScrollingFrame")
+drawerBody.BackgroundTransparency = 1
+drawerBody.BorderSizePixel = 0
+drawerBody.Size = UDim2.new(1,-24,1,-62)
+drawerBody.Position = UDim2.fromOffset(12,54)
+drawerBody.ScrollBarThickness = 3
+drawerBody.ScrollBarImageTransparency = .4
+drawerBody.CanvasSize = UDim2.new(0,0,0,0)
+drawerBody.ScrollingDirection = Enum.ScrollingDirection.Y
+drawerBody.ZIndex = 705
+drawerBody.Parent = drawer
+
+local drawerCursor = 0
 
 local function clearDrawer()
     for _, x in ipairs(drawerBody:GetChildren()) do
         x:Destroy()
     end
+    drawerCursor = 0
+    drawerBody.CanvasPosition = Vector2.zero
+    drawerBody.CanvasSize = UDim2.new(0,0,0,0)
 end
 
 local function openDrawer(titleText, builder)
@@ -606,6 +677,13 @@ local function openDrawer(titleText, builder)
     drawer.Size = UDim2.fromOffset(320,0)
     tween(drawer,.25,{Size=UDim2.fromOffset(320,360)},Enum.EasingStyle.Quint)
     builder()
+    local maxY = 0
+    for _,o in ipairs(drawerBody:GetChildren()) do
+        if o:IsA("GuiObject") then
+            maxY = math.max(maxY, o.Position.Y.Offset + o.Size.Y.Offset + 10)
+        end
+    end
+    drawerBody.CanvasSize = UDim2.new(0,0,0,maxY)
 end
 
 local function closeDrawer()
@@ -621,6 +699,7 @@ local function drawerToggle(text, get, set, y)
         b.TextColor3 = get() and T().text or T().sub
     end
     conn(b.Activated:Connect(function() set(not get()); refresh() end))
+    drawerBody.CanvasSize = UDim2.new(0,0,0,math.max(drawerBody.CanvasSize.Y.Offset,y+50))
     refresh()
 end
 
@@ -633,6 +712,9 @@ local function resetPage(pageName)
         x:Destroy()
     end
     pageLayout[pageName] = {}
+    pageCursor[pageName] = 0
+    pages[pageName].CanvasPosition = Vector2.zero
+    pages[pageName].CanvasSize = UDim2.new(0,0,0,0)
 end
 
 local function setPage(name)
@@ -644,6 +726,7 @@ local function setPage(name)
         b.BackgroundColor3 = p == name and T().card2 or T().card
         b.TextColor3 = p == name and T().text or T().sub
     end
+    if pages[name] then pages[name].CanvasPosition = Vector2.zero end
 end
 
 for name,b in pairs(navButtons) do
@@ -1377,9 +1460,10 @@ local function applyStyle(rootGui)
     fovCircle:FindFirstChildOfClass("UIStroke").Color=T().accent
 end
 
+local lastTheme, lastFont = nil, nil
 conn(RunService.Heartbeat:Connect(function()
-    -- Lightweight style polling; settings changes are infrequent.
-    if S.Theme or S.Font then
+    if lastTheme ~= S.Theme or lastFont ~= S.Font then
+        lastTheme, lastFont = S.Theme, S.Font
         applyStyle(gui)
     end
     if S.Chams or S.RoleLabels then
@@ -1404,20 +1488,20 @@ end))
 --==================================================
 
 conn(search:GetPropertyChangedSignal("Text"):Connect(function()
-    local q=search.Text:lower()
-    for _,pg in pairs(pages) do
-        for _,o in ipairs(pg:GetChildren()) do
-            if o:IsA("Frame") then
-                local hit=q=="" or o:GetDescendants()[1] ~= nil
-                local found=false
+    local q=search.Text:lower():gsub("^%s+",""):gsub("%s+$","")
+    local pg=pages[S.Page]
+    if not pg then return end
+    for _,o in ipairs(pg:GetChildren()) do
+        if o:IsA("GuiObject") then
+            local found = q == ""
+            if not found then
                 for _,d in ipairs(o:GetDescendants()) do
-                    if (d:IsA("TextLabel") or d:IsA("TextButton")) and d.Text:lower():find(q,1,true) then
-                        found=true
-                        break
+                    if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                        if d.Text:lower():find(q,1,true) then found=true break end
                     end
                 end
-                if q~="" then o.Visible=found else o.Visible=true end
             end
+            o.Visible=found
         end
     end
 end))
