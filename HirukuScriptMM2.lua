@@ -1,4 +1,4 @@
---// HIRUKU MM2 V10
+--// HIRUKU MM2 V11
 --// Mobile-first Roblox UI
 --// Features: animated menu, themes, fonts, role-aware visuals, aim assist,
 --// movement utilities, coin collection, weapon pickup, target movement and
@@ -20,7 +20,7 @@ local Camera = Workspace.CurrentCamera
 -- CONFIG / STATE
 --==================================================
 
-local GKEY = "__HIRUKU_MM2_V9"
+local GKEY = "__HIRUKU_MM2_V11"
 pcall(function()
     if _G[GKEY] and _G[GKEY].Cleanup then
         _G[GKEY].Cleanup()
@@ -334,12 +334,19 @@ local pillText = label(pill, "Hiruku", UDim2.fromScale(1,1), UDim2.fromOffset(0,
 -- MAIN WINDOW
 --==================================================
 
-local main = frame(gui, UDim2.fromOffset(760,510), UDim2.new(.5,-380,.5,-255), T().panel, .04, 200)
+local main = frame(gui, UDim2.fromOffset(760,510), UDim2.new(.5,-380,.5,-255), T().panel, .18, 200)
 corner(main, 18)
 stroke(main, T().line, .1, 1)
 
-local glass = frame(main, UDim2.fromScale(1,1), UDim2.fromScale(0,0), T().panel, .18, 201)
+local glass = frame(main, UDim2.fromScale(1,1), UDim2.fromScale(0,0), T().panel, .42, 201)
 corner(glass,18)
+
+-- Frosted-glass layers: blur stays visually contained inside the menu.
+-- No Lighting BlurEffect is used, so the actual game view remains sharp.
+local frostA = frame(main, UDim2.new(1,-6,1,-6), UDim2.fromOffset(3,3), Color3.fromRGB(255,255,255), .965, 202)
+corner(frostA,16)
+local frostB = frame(main, UDim2.new(1,-18,1,-18), UDim2.fromOffset(9,9), Color3.fromRGB(255,255,255), .985, 203)
+corner(frostB,14)
 
 local title = label(main, "Hiruku", UDim2.fromOffset(300,34), UDim2.fromOffset(24,20), 23, T().text, 220)
 local version = label(main, "MM2 - v 1.0", UDim2.fromOffset(200,20), UDim2.fromOffset(25,50), 11, T().sub, 220)
@@ -361,9 +368,9 @@ search.ZIndex = 225
 search.Parent = main
 corner(search,19)
 
-local nav = frame(main, UDim2.fromOffset(168,340), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 220)
+local nav = frame(main, UDim2.fromOffset(168,340), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 225)
 corner(nav,12)
-local content = frame(main, UDim2.new(1,-210,1,-150), UDim2.fromOffset(194,135), Color3.new(0,0,0), 1, 220)
+local content = frame(main, UDim2.new(1,-210,1,-150), UDim2.fromOffset(194,135), Color3.new(0,0,0), 1, 225)
 
 local pages = {}
 local navButtons = {}
@@ -402,7 +409,7 @@ close.TextSize = 22
 --==================================================
 
 -- Dedicated title/drag surface. It does not cover the game area.
-local dragArea = frame(main, UDim2.new(1,-95,0,68), UDim2.fromOffset(10,8), Color3.new(0,0,0), 1, 215)
+local dragArea = frame(main, UDim2.new(1,-95,0,68), UDim2.fromOffset(10,8), Color3.new(0,0,0), 1, 231)
 dragArea.BackgroundTransparency = 1
 
 local function beginDrag(input)
@@ -413,7 +420,10 @@ local function beginDrag(input)
     DRAG.origin = main.Position
 end
 
-conn(dragArea.InputBegan:Connect(beginDrag))
+conn(dragArea.InputBegan:Connect(function(input)
+    if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+    beginDrag(input)
+end))
 
 conn(UIS.InputChanged:Connect(function(input)
     if not DRAG.active then return end
@@ -719,14 +729,22 @@ end
 
 local function setPage(name)
     S.Page = name
+    -- Never let an old search query make a new page look empty.
+    search.Text = ""
     for p, pg in pairs(pages) do
-        pg.Visible = p == name
+        pg.Visible = (p == name)
+        pg.Active = (p == name)
+        pg.ZIndex = 225
     end
     for p, b in pairs(navButtons) do
         b.BackgroundColor3 = p == name and T().card2 or T().card
         b.TextColor3 = p == name and T().text or T().sub
+        b.ZIndex = 230
     end
-    if pages[name] then pages[name].CanvasPosition = Vector2.zero end
+    if pages[name] then
+        pages[name].CanvasPosition = Vector2.zero
+        pages[name].CanvasSize = UDim2.new(0,0,0,(pageCursor[name] or 0)+16)
+    end
 end
 
 for name,b in pairs(navButtons) do
@@ -1216,14 +1234,20 @@ local function doFly(dt)
     if not r or not h then return end
     local move=h.MoveDirection
     local cf=Camera.CFrame
-    local flat=Vector3.new(cf.LookVector.X,0,cf.LookVector.Z)
-    if flat.Magnitude<.01 then flat=Vector3.new(0,0,-1) end
-    flat=flat.Unit
-    local right=Vector3.new(cf.RightVector.X,0,cf.RightVector.Z)
-    if right.Magnitude<.01 then right=Vector3.new(1,0,0) end
-    right=right.Unit
-
-    local dir=right*move.X + flat*move.Z
+    local flatForward=Vector3.new(cf.LookVector.X,0,cf.LookVector.Z)
+    if flatForward.Magnitude<.01 then flatForward=Vector3.new(0,0,-1) end
+    flatForward=flatForward.Unit
+    local flatRight=Vector3.new(cf.RightVector.X,0,cf.RightVector.Z)
+    if flatRight.Magnitude<.01 then flatRight=Vector3.new(1,0,0) end
+    flatRight=flatRight.Unit
+    local inputDir=move
+    local dir=inputDir.Magnitude > .01 and inputDir.Unit or Vector3.zero
+    if inputDir.Magnitude > .01 then
+        local forwardAmount=inputDir:Dot(flatForward)
+        local rightAmount=inputDir:Dot(flatRight)
+        dir=(flatRight*rightAmount + flatForward*forwardAmount)
+        if dir.Magnitude > .01 then dir=dir.Unit end
+    end
     local vertical=0
     if UIS:IsKeyDown(Enum.KeyCode.Space) then vertical=1 end
     if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then vertical=-1 end
@@ -1488,20 +1512,26 @@ end))
 --==================================================
 
 conn(search:GetPropertyChangedSignal("Text"):Connect(function()
-    local q=search.Text:lower():gsub("^%s+",""):gsub("%s+$","")
-    local pg=pages[S.Page]
+    local q = search.Text:lower():gsub("^%s+",""):gsub("%s+$","")
+    local pg = pages[S.Page]
     if not pg then return end
     for _,o in ipairs(pg:GetChildren()) do
         if o:IsA("GuiObject") then
-            local found = q == ""
-            if not found then
-                for _,d in ipairs(o:GetDescendants()) do
-                    if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-                        if d.Text:lower():find(q,1,true) then found=true break end
+            if q == "" then
+                o.Visible = true
+            else
+                local found = false
+                if o:IsA("TextButton") or o:IsA("TextLabel") then
+                    found = o.Text:lower():find(q,1,true) ~= nil
+                else
+                    for _,d in ipairs(o:GetDescendants()) do
+                        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                            if d.Text:lower():find(q,1,true) then found=true break end
+                        end
                     end
                 end
+                o.Visible = found
             end
-            o.Visible=found
         end
     end
 end))
@@ -1540,6 +1570,7 @@ _G[GKEY]=S
 
 scaleGui()
 setPage("Combat")
+search.Text = ""
 refreshVisuals()
 notify("Hiruku successfully loaded")
 
