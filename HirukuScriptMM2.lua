@@ -77,6 +77,9 @@ local S = {
 
     Language = "English",
     UIScale = 1,
+    FontName = "Gotham",
+    Font = Enum.Font.Gotham,
+    CoinFarmSpeed = 70,
 
     connections = {},
     instances = {},
@@ -166,7 +169,7 @@ local function text(p, value, size, font)
     x.Text = value
     x.TextColor3 = Color3.fromRGB(232,232,232)
     x.TextSize = size or 13
-    x.Font = font or Enum.Font.Gotham
+    x.Font = S.Font or font or Enum.Font.Gotham
     x.TextXAlignment = Enum.TextXAlignment.Left
     x.Parent = p
     return x
@@ -249,7 +252,7 @@ pill.BackgroundTransparency = .13
 pill.Text = "Hiruku"
 pill.TextColor3 = Color3.fromRGB(245,245,245)
 pill.TextSize = 15
-pill.Font = Enum.Font.GothamBold
+pill.Font = S.Font
 pill.AutoButtonColor = false
 pill.Active = true
 pill.Modal = true
@@ -270,17 +273,30 @@ menu.Active = true
 uiCorner(menu,16)
 uiStroke(menu,.84)
 
--- Faux local blur layers: only inside the menu.
--- Roblox's normal BlurEffect affects the entire viewport, so it is not used.
-local blurLayer = newFrame(menu, Color3.fromRGB(40,40,40), .82)
-blurLayer.Size = UDim2.fromScale(1,1)
-blurLayer.ZIndex = 0
-uiCorner(blurLayer,16)
+-- Input shield keeps touches inside the menu from reaching the 3D camera.
+-- Interactive controls are placed above it with higher ZIndex.
+local inputShield=add(Instance.new("TextButton"))
+inputShield.Name="HirukuInputShield"
+inputShield.BackgroundTransparency=1
+inputShield.Text=""
+inputShield.AutoButtonColor=false
+inputShield.Active=true
+inputShield.Modal=true
+inputShield.Size=UDim2.fromScale(1,1)
+inputShield.ZIndex=1200
+inputShield.Parent=menu
 
-local topGlow = newFrame(menu, Color3.fromRGB(255,255,255), .965)
+-- Glass treatment: no Lighting BlurEffect is used, so the game view stays sharp.
+-- These translucent layers are deliberately behind every text/control element.
+local glassLayer = newFrame(menu, Color3.fromRGB(18,18,18), .24)
+glassLayer.Size = UDim2.fromScale(1,1)
+glassLayer.ZIndex = 1
+uiCorner(glassLayer,16)
+
+local topGlow = newFrame(menu, Color3.fromRGB(255,255,255), .975)
 topGlow.Position = UDim2.new(0,1,0,1)
 topGlow.Size = UDim2.new(1,-2,0,85)
-topGlow.ZIndex = 1
+topGlow.ZIndex = 2
 uiCorner(topGlow,15)
 
 local header = newFrame(menu, Color3.fromRGB(0,0,0), 1)
@@ -289,12 +305,12 @@ header.ZIndex = 1202
 
 local title = text(header,"Hiruku",21,Enum.Font.GothamBold)
 title.Position = UDim2.new(0,20,0,13)
-title.ZIndex=1003
+title.ZIndex=1207
 title.Size = UDim2.new(1,-40,0,28)
 
 local subtitle = text(header,"MM2 - v 1.0",10,Enum.Font.GothamMedium)
 subtitle.Position = UDim2.new(0,21,0,42)
-subtitle.ZIndex=1003
+subtitle.ZIndex=1207
 subtitle.Size = UDim2.new(1,-42,0,17)
 
 local sg = add(Instance.new("UIGradient"))
@@ -321,29 +337,30 @@ search.PlaceholderText = "Search feature..."
 search.PlaceholderColor3 = Color3.fromRGB(100,100,100)
 search.TextColor3 = Color3.fromRGB(230,230,230)
 search.TextSize = 11
-search.Font = Enum.Font.Gotham
+search.Font = S.Font
 search.ClearTextOnFocus = false
 search.Active = true
-search.ZIndex = 1203
+search.ZIndex = 1207
 search.Parent = menu
 uiCorner(search,10)
 
 local nav = newFrame(menu, Color3.new(0,0,0), 1)
 nav.Position = UDim2.new(0,14,0,121)
 nav.Size = UDim2.new(0,145,1,-135)
-nav.ZIndex = 1205
+nav.ZIndex = 1206
 
 local content = newFrame(menu, Color3.new(0,0,0), 1)
 content.Position = UDim2.new(0,170,0,121)
 content.Size = UDim2.new(1,-184,1,-135)
-content.ZIndex = 1204
+content.ZIndex = 1206
 
 local ICON_SHEET = "rbxassetid://3926305904"
 local ICONS = {
-    Combat={Vector2.new(804,4),Vector2.new(36,36)}, -- sword / military-style icon
-    Visuals={Vector2.new(204,444),Vector2.new(36,36)}, -- eye / visibility-style icon
+    -- Roblox's public UI sprite sheet. These are image-sprite icons, not emoji.
+    Combat={Vector2.new(804,4),Vector2.new(36,36)}, -- crossed/sword-style
+    Visuals={Vector2.new(204,444),Vector2.new(36,36)}, -- visibility / eye
     Misc={Vector2.new(764,764),Vector2.new(36,36)}, -- more / three dots
-    Settings={Vector2.new(4,4),Vector2.new(36,36)}, -- settings / gear
+    Settings={Vector2.new(4,4),Vector2.new(36,36)}, -- settings
 }
 local tabs={"Combat","Visuals","Misc","Settings"}
 local pages={}
@@ -358,7 +375,7 @@ local function icon(parent,tab)
     im.ImageRectSize=ICONS[tab][2]
     im.Size=UDim2.new(0,24,0,24)
     im.Position=UDim2.new(0,7,.5,-12)
-    im.ZIndex=1013
+    im.ZIndex=1212
     im.Parent=parent
     return im
 end
@@ -366,18 +383,18 @@ end
 local function page(name)
     local p=add(Instance.new("ScrollingFrame"))
     p.Name=name
-    p.Size=UDim2.fromScale(1,1)
+    p.Size=UDim2.new(1,-2,1,0)
     p.BackgroundTransparency=1
     p.BorderSizePixel=0
     p.ScrollBarThickness=2
     p.AutomaticCanvasSize=Enum.AutomaticSize.Y
     p.CanvasSize=UDim2.new()
     p.Visible=false
-    p.ZIndex=1011
+    p.ZIndex=1210
     p.Active=true
     p.Parent=content
     local l=add(Instance.new("UIListLayout"))
-    l.Padding=UDim.new(0,9)
+    l.Padding=UDim.new(0,12)
     l.SortOrder=Enum.SortOrder.LayoutOrder
     l.Parent=p
     local pad=add(Instance.new("UIPadding"))
@@ -388,27 +405,26 @@ local function page(name)
     return p
 end
 
-local navLayout=add(Instance.new("UIListLayout"))
-navLayout.Padding=UDim.new(0,9)
-navLayout.SortOrder=Enum.SortOrder.LayoutOrder
-navLayout.Parent=nav
+-- Explicit navigation positions: avoids layout compression/overlap on mobile.
 for order,name in ipairs(tabs) do
     local b=mkButton(nav)
-    b.LayoutOrder=order
-    b.Size=UDim2.new(1,0,0,40)
-    b.ZIndex=1012
-    b.BackgroundColor3=Color3.fromRGB(25,25,25)
+    b.Name="Tab_"..name
+    b.Position=UDim2.new(0,0,0,(order-1)*50)
+    b.Size=UDim2.new(1,0,0,42)
+    b.ZIndex=1210
+    b.BackgroundColor3=Color3.fromRGB(30,30,30)
     b.BackgroundTransparency=1
     b.Parent=nav
     b.Active=true
     b.Modal=true
-    uiCorner(b,9)
+    b.Selectable=true
+    uiCorner(b,10)
     icon(b,name)
     local tx=text(b,name,11,Enum.Font.GothamMedium)
     tx.Position=UDim2.new(0,40,0,0)
     tx.Size=UDim2.new(1,-45,1,0)
-    tx.TextColor3=Color3.fromRGB(170,170,170)
-    tx.ZIndex=1013
+    tx.TextColor3=Color3.fromRGB(180,180,180)
+    tx.ZIndex=1212
     tabButtons[name]={button=b,label=tx}
     page(name)
 end
@@ -427,25 +443,25 @@ end
 local function card(parent, name, desc, callback, settingsCallback)
     local row = newFrame(parent,Color3.fromRGB(23,23,23),.06)
     row.Size = UDim2.new(1,0,0,57)
-    row.ZIndex=1012
+    row.ZIndex=1211
     uiCorner(row,10)
 
     local n=text(row,name,12,Enum.Font.GothamMedium)
     n.Position=UDim2.new(0,13,0,8)
     n.Size=UDim2.new(1,-105,0,18)
-    n.ZIndex=1013
+    n.ZIndex=1213
 
     local d=text(row,desc or "",9,Enum.Font.Gotham)
     d.Position=UDim2.new(0,13,0,30)
     d.Size=UDim2.new(1,-105,0,16)
     d.TextColor3=Color3.fromRGB(105,105,105)
-    d.ZIndex=1013
+    d.ZIndex=1213
 
     if settingsCallback then
         local sb=mkButton(row)
         sb.Size=UDim2.new(0,24,0,24)
         sb.Position=UDim2.new(1,-79,.5,-12)
-        sb.ZIndex=1014
+        sb.ZIndex=1214
 
         local si=add(Instance.new("ImageLabel"))
         si.BackgroundTransparency=1
@@ -454,27 +470,34 @@ local function card(parent, name, desc, callback, settingsCallback)
         si.ImageRectOffset=Vector2.new(4,4)
         si.ImageRectSize=Vector2.new(36,36)
         si.Size=UDim2.fromScale(1,1)
-        si.ZIndex=1015
+        si.ZIndex=1215
         si.Parent=sb
         conn(sb.Activated:Connect(settingsCallback))
     end
+
+    -- Left-side hit target makes the entire feature row touch-friendly.
+    local hit=mkButton(row)
+    hit.Position=UDim2.new(0,0,0,0)
+    hit.Size=UDim2.new(1,-66,1,0)
+    hit.ZIndex=1016
+    hit.Parent=row
 
     local sw=mkButton(row)
     sw.Size=UDim2.new(0,42,0,22)
     sw.Position=UDim2.new(1,-52,.5,-11)
     sw.BackgroundColor3=Color3.fromRGB(48,48,48)
-    sw.ZIndex=1014
+    sw.ZIndex=1214
     sw.Parent=row
     uiCorner(sw,12)
 
     local dot=newFrame(sw,Color3.fromRGB(180,180,180),0)
     dot.Size=UDim2.new(0,16,0,16)
     dot.Position=UDim2.new(0,3,.5,-8)
-    dot.ZIndex=1015
+    dot.ZIndex=1215
     uiCorner(dot,8)
 
     local on=false
-    conn(sw.Activated:Connect(function()
+    local function toggle()
         on=not on
         tw(sw,.17,{BackgroundColor3=on and Color3.fromRGB(225,225,225) or Color3.fromRGB(48,48,48)})
         tw(dot,.17,{
@@ -482,7 +505,9 @@ local function card(parent, name, desc, callback, settingsCallback)
             BackgroundColor3=on and Color3.fromRGB(15,15,15) or Color3.fromRGB(180,180,180)
         })
         if callback then callback(on) end
-    end))
+    end
+    conn(sw.Activated:Connect(toggle))
+    conn(hit.Activated:Connect(toggle))
 
     return row
 end
@@ -491,7 +516,7 @@ local function heading(parent, value)
     local x=text(parent,value,10,Enum.Font.GothamBold)
     x.Size=UDim2.new(1,0,0,22)
     x.TextColor3=Color3.fromRGB(115,115,115)
-    x.ZIndex=1013
+    x.ZIndex=1213
     return x
 end
 
@@ -521,7 +546,7 @@ drawerClose.BackgroundColor3=Color3.fromRGB(30,30,30)
 drawerClose.Text="×"
 drawerClose.TextColor3=Color3.fromRGB(190,190,190)
 drawerClose.TextSize=18
-drawerClose.Font=Enum.Font.GothamBold
+drawerClose.Font=S.Font
 drawerClose.ZIndex=1120
 drawerClose.Parent=drawer
 uiCorner(drawerClose,14)
@@ -730,7 +755,7 @@ local function rebuildTargets()
             b.Text=m.Name
             b.TextColor3=Color3.fromRGB(205,205,205)
             b.TextSize=10
-            b.Font=Enum.Font.GothamMedium
+            b.Font=S.Font
             b.TextXAlignment=Enum.TextXAlignment.Left
             b.Parent=targetScroll
             uiCorner(b,7)
@@ -785,14 +810,14 @@ card(pages.Misc,"Sex Aura","Target movement tester for authorized targets",funct
 
 -- Additional MM2 QA / utility features
 heading(pages.Visuals,"MM2 UTILITIES")
-card(pages.Visuals,"Coin Radar","Highlight nearby test coins without collecting them",function(v) S.CoinRadar=v end)
+card(pages.Visuals,"Coin Radar","Highlight nearby objects named Coin",function(v) S.CoinRadar=v end)
 card(pages.Visuals,"Crosshair","Minimal center crosshair for testing",function(v) S.Crosshair=v end)
 card(pages.Visuals,"Fullbright","Local lighting test mode",function(v) S.Fullbright=v end)
 
 heading(pages.Misc,"MM2 ROUND / QA")
 card(pages.Misc,"Anti AFK","Keep the test client active",function(v) S.AntiAFK=v end)
 card(pages.Misc,"Round Info","Show local round/player state",function(v) S.RoundInfo=v end)
-card(pages.Misc,"Test Coin Farm","Moves only to coins explicitly marked HirukuTestCoin",function(v) S.TestCoinFarm=v end,function() openMovementDrawer("Test Coin Farm") end)
+card(pages.Misc,"Coin Farm","Find nearest objects named Coin and move toward them",function(v) S.TestCoinFarm=v end,function() openMovementDrawer("Test Coin Farm") end)
 
 -- Settings
 heading(pages.Settings,"INTERFACE")
@@ -819,7 +844,7 @@ minus.BackgroundColor3=Color3.fromRGB(40,40,40)
 minus.Text="−"
 minus.TextColor3=Color3.fromRGB(220,220,220)
 minus.TextSize=15
-minus.Font=Enum.Font.GothamBold
+minus.Font=S.Font
 uiCorner(minus,7)
 
 local plus=mkButton(sizeBox)
@@ -829,7 +854,7 @@ plus.BackgroundColor3=Color3.fromRGB(40,40,40)
 plus.Text="+"
 plus.TextColor3=Color3.fromRGB(220,220,220)
 plus.TextSize=15
-plus.Font=Enum.Font.GothamBold
+plus.Font=S.Font
 uiCorner(plus,7)
 
 local menuScale=add(Instance.new("UIScale"))
@@ -850,9 +875,59 @@ conn(plus.Activated:Connect(function()
     updateScale()
 end))
 
+-- Font selector
+heading(pages.Settings,"MENU FONT")
+local fontBox=newFrame(pages.Settings,Color3.fromRGB(24,24,24),.03)
+fontBox.Size=UDim2.new(1,0,0,145)
+uiCorner(fontBox,9)
+
+local fontTitle=text(fontBox,"Font",10,S.Font)
+fontTitle.Position=UDim2.new(0,11,0,8)
+fontTitle.Size=UDim2.new(1,-22,0,18)
+fontTitle.TextColor3=Color3.fromRGB(230,230,230)
+
+local fontHint=text(fontBox,"Choose a font for all menu text",9,S.Font)
+fontHint.Position=UDim2.new(0,11,0,27)
+fontHint.Size=UDim2.new(1,-22,0,16)
+fontHint.TextColor3=Color3.fromRGB(105,105,105)
+
+local fontNames={"Gotham","SourceSans","Code","Arial","Cartoon","Fantasy","SciFi","Bangers"}
+local fontList=newFrame(fontBox,Color3.new(0,0,0),1)
+fontList.Position=UDim2.new(0,9,0,49)
+fontList.Size=UDim2.new(1,-18,0,86)
+
+local function setMenuFont(name)
+    local ok,enumFont=pcall(function() return Enum.Font[name] end)
+    if not ok or not enumFont then return end
+    S.FontName=name
+    S.Font=enumFont
+    for _,obj in ipairs(gui:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            pcall(function() obj.Font=enumFont end)
+        end
+    end
+    fontTitle.Text="Font: "..name
+end
+
+for i,name in ipairs(fontNames) do
+    local b=mkButton(fontList)
+    local col=(i-1)%4
+    local row=math.floor((i-1)/4)
+    b.Position=UDim2.new(0,col*25/100,0,row*38/100)
+    b.Size=UDim2.new(.235,0,0,31)
+    b.BackgroundColor3=Color3.fromRGB(32,32,32)
+    b.Text=name
+    b.TextColor3=Color3.fromRGB(210,210,210)
+    b.TextSize=9
+    b.Font=S.Font
+    b.ZIndex=1215
+    uiCorner(b,7)
+    conn(b.Activated:Connect(function() setMenuFont(name) end))
+end
+
 -- Navigation
 for name,ref in pairs(tabButtons) do
-    conn(ref.button.MouseButton1Click:Connect(function()
+    conn(ref.button.Activated:Connect(function()
         setTab(name)
     end))
 end
@@ -865,9 +940,9 @@ dragSurface.BackgroundTransparency=1
 dragSurface.Text=""
 dragSurface.AutoButtonColor=false
 dragSurface.Active=true
-dragSurface.Modal=false
-dragSurface.Size=UDim2.new(1,0,0,58)
-dragSurface.ZIndex=1001
+dragSurface.Modal=true
+dragSurface.Size=UDim2.new(1,0,0,62)
+dragSurface.ZIndex=1201
 dragSurface.Parent=menu
 
 local function makeDraggable(obj,handle)
@@ -1241,18 +1316,14 @@ conn(search:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end))
 
--- Safe private-test coin helpers. Only objects with HirukuTestCoin=true or
--- objects inside workspace.HirukuTestCoins are eligible. Public MM2 coins are ignored.
+-- Coin helpers: this build searches for objects named exactly "Coin".
+-- Intended for the user's controlled/private MM2 test session.
 local coinHighlights={}
-for _,x in pairs(S.instances) do
-    if x.Name=="HirukuCoinRadar" then pcall(function() x:Destroy() end) end
-end
-local function isTestCoin(obj)
+local function isCoin(obj)
     if not obj then return false end
-    if obj:GetAttribute("HirukuTestCoin") == true then return true end
-    local folder=workspace:FindFirstChild("HirukuTestCoins")
-    return folder and obj:IsDescendantOf(folder)
+    return obj.Name=="Coin" and (obj:IsA("BasePart") or obj:IsA("Model"))
 end
+
 local function coinPosition(obj)
     if obj:IsA("BasePart") then return obj.Position end
     if obj:IsA("Model") then
@@ -1260,43 +1331,41 @@ local function coinPosition(obj)
         return pp and pp.Position
     end
 end
-local function nearestTestCoin(root)
-    local best,bestD=nil,math.huge
-    local folder=workspace:FindFirstChild("HirukuTestCoins")
-    if folder then
-        for _,obj in ipairs(folder:GetDescendants()) do
-            if (obj:IsA("BasePart") or obj:IsA("Model")) and isTestCoin(obj) then
-                local pos=coinPosition(obj)
-                if pos then
-                    local d=(pos-root.Position).Magnitude
-                    if d<bestD then best,bestD=obj,d end
-                end
-            end
+
+local function allCoins()
+    local result={}
+    for _,obj in ipairs(workspace:GetDescendants()) do
+        if isCoin(obj) then
+            table.insert(result,obj)
         end
     end
-    for _,obj in ipairs(workspace:GetDescendants()) do
-        if obj:GetAttribute("HirukuTestCoin") == true then
-            local pos=coinPosition(obj)
-            if pos then
-                local d=(pos-root.Position).Magnitude
-                if d<bestD then best,bestD=obj,d end
-            end
+    return result
+end
+
+local function nearestCoin(root)
+    local best,bestD=nil,math.huge
+    for _,obj in ipairs(allCoins()) do
+        local pos=coinPosition(obj)
+        if pos then
+            local d=(pos-root.Position).Magnitude
+            if d<bestD then best,bestD=obj,d end
         end
     end
     return best,bestD
 end
+
 local function updateCoinRadar(root)
     if not S.CoinRadar then
         for obj,h in pairs(coinHighlights) do pcall(function() h:Destroy() end); coinHighlights[obj]=nil end
         return
     end
     for obj,h in pairs(coinHighlights) do
-        if not obj.Parent then pcall(function() h:Destroy() end); coinHighlights[obj]=nil end
+        if not obj.Parent or not isCoin(obj) then
+            pcall(function() h:Destroy() end); coinHighlights[obj]=nil
+        end
     end
-    local folder=workspace:FindFirstChild("HirukuTestCoins")
-    if not folder then return end
-    for _,obj in ipairs(folder:GetChildren()) do
-        if isTestCoin(obj) and not coinHighlights[obj] then
+    for _,obj in ipairs(allCoins()) do
+        if not coinHighlights[obj] then
             local h=add(Instance.new("Highlight"))
             h.Name="HirukuCoinRadar"
             h.Adornee=obj:IsA("Model") and obj or nil
@@ -1304,6 +1373,7 @@ local function updateCoinRadar(root)
             h.FillColor=Color3.fromRGB(245,245,245)
             h.OutlineColor=Color3.fromRGB(180,180,180)
             h.FillTransparency=.55
+            h.OutlineTransparency=.15
             h.Parent=gui
             coinHighlights[obj]=h
         end
@@ -1414,11 +1484,13 @@ conn(RunService.Heartbeat:Connect(function(dt)
     end
 
     if S.TestCoinFarm then
-        local coin=nearestTestCoin(root)
+        local coin=nearestCoin(root)
         local pos=coin and coinPosition(coin)
         if pos then
-            -- Direct movement is intentionally limited to the private HirukuTestCoins set.
-            root.CFrame=CFrame.new(pos + Vector3.new(0,2.5,0), pos)
+            local offset=pos-root.Position
+            if offset.Magnitude>2 then
+                root.AssemblyLinearVelocity=offset.Unit*S.CoinFarmSpeed
+            end
         end
     end
 
