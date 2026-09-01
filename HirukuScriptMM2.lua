@@ -44,7 +44,8 @@ local S = {
     AimSmooth = 0.18,
     AimLOS = true,
     AimTargetPart = "Head",
-    AimNPCOnly = true,
+    AimNPCOnly = false,
+    AimPlayers = true,
 
     AutoShot = false,
     KillAura = false,
@@ -62,7 +63,10 @@ local S = {
     FlySpeed = 55,
     BunnyHop = false,
     BunnyPower = 45,
+    BunnySpeed = 18,
+    BunnyAutoStrafe = true,
     NoClip = false,
+    FlyVertical = 0,
     Spin = false,
     SpinSpeed = 8,
     TargetMovement = false,
@@ -108,6 +112,11 @@ local function cleanup()
     end
 
     local c = LocalPlayer.Character
+    if c then
+        for _,part in ipairs(c:GetDescendants()) do
+            if part:IsA("BasePart") then pcall(function() part.CanCollide=true end) end
+        end
+    end
     local h = c and c:FindFirstChildOfClass("Humanoid")
     if h then
         if S.saved.WalkSpeed then h.WalkSpeed = S.saved.WalkSpeed end
@@ -184,7 +193,8 @@ local gui = add(Instance.new("ScreenGui"))
 gui.Name = "Hiruku"
 gui.IgnoreGuiInset = true
 gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.DisplayOrder = 1000000
 
 pcall(function()
     gui.Parent = game:GetService("CoreGui")
@@ -239,7 +249,7 @@ pill.TextColor3 = Color3.fromRGB(245,245,245)
 pill.TextSize = 15
 pill.Font = Enum.Font.GothamBold
 pill.AutoButtonColor = false
-pill.ZIndex = 70
+pill.ZIndex = 1000
 pill.Parent = gui
 uiCorner(pill,20)
 uiStroke(pill,.78)
@@ -251,7 +261,8 @@ menu.AnchorPoint = Vector2.new(.5,.5)
 menu.Position = UDim2.fromScale(.5,.52)
 menu.Size = UDim2.new(0,610,0,410)
 menu.Visible = false
-menu.ZIndex = 50
+menu.ZIndex = 980
+menu.Active = true
 uiCorner(menu,16)
 uiStroke(menu,.84)
 
@@ -270,7 +281,7 @@ uiCorner(topGlow,15)
 
 local header = newFrame(menu, Color3.fromRGB(0,0,0), 1)
 header.Size = UDim2.new(1,0,0,112)
-header.ZIndex = 55
+header.ZIndex = 996
 
 local title = text(header,"Hiruku",21,Enum.Font.GothamBold)
 title.Position = UDim2.new(0,20,0,13)
@@ -306,103 +317,81 @@ search.TextColor3 = Color3.fromRGB(230,230,230)
 search.TextSize = 11
 search.Font = Enum.Font.Gotham
 search.ClearTextOnFocus = false
-search.ZIndex = 56
+search.Active = true
+search.ZIndex = 998
 search.Parent = menu
 uiCorner(search,10)
 
 local nav = newFrame(menu, Color3.new(0,0,0), 1)
 nav.Position = UDim2.new(0,14,0,121)
-nav.Size = UDim2.new(0,126,1,-135)
-nav.ZIndex = 55
-
--- Keep every navigation item in its own row.
--- The previous build created the buttons at the same default position,
--- which made the four sections/icons appear glued together.
-local navLayout = add(Instance.new("UIListLayout"))
-navLayout.FillDirection = Enum.FillDirection.Vertical
-navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-navLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-navLayout.SortOrder = Enum.SortOrder.LayoutOrder
-navLayout.Padding = UDim.new(0,7)
-navLayout.Parent = nav
-
-local navPadding = add(Instance.new("UIPadding"))
-navPadding.PaddingTop = UDim.new(0,2)
-navPadding.Parent = nav
+nav.Size = UDim2.new(0,145,1,-135)
+nav.ZIndex = 1005
 
 local content = newFrame(menu, Color3.new(0,0,0), 1)
-content.Position = UDim2.new(0,151,0,121)
-content.Size = UDim2.new(1,-165,1,-135)
-content.ZIndex = 55
+content.Position = UDim2.new(0,170,0,121)
+content.Size = UDim2.new(1,-184,1,-135)
+content.ZIndex = 1000
 
--- Imported icon sheet.
--- 3926305904 is Roblox's commonly used icon sprite sheet.
 local ICON_SHEET = "rbxassetid://3926305904"
 local ICONS = {
-    Combat  = {Vector2.new(324,44), Vector2.new(36,36)},
-    Visuals = {Vector2.new(564,44), Vector2.new(36,36)},
-    Misc    = {Vector2.new(204,44), Vector2.new(36,36)},
-    Settings= {Vector2.new(444,44), Vector2.new(36,36)},
+    Combat={Vector2.new(324,44),Vector2.new(36,36)},
+    Visuals={Vector2.new(564,44),Vector2.new(36,36)},
+    Misc={Vector2.new(204,44),Vector2.new(36,36)},
+    Settings={Vector2.new(444,44),Vector2.new(36,36)},
 }
+local tabs={"Combat","Visuals","Misc","Settings"}
+local pages={}
+local tabButtons={}
 
-local tabs = {"Combat","Visuals","Misc","Settings"}
-local pages = {}
-local tabButtons = {}
-
-local function icon(parent, tab)
-    local im = add(Instance.new("ImageLabel"))
-    im.BackgroundTransparency = 1
-    im.Image = ICON_SHEET
-    im.ImageColor3 = Color3.fromRGB(145,145,145)
-    im.ImageTransparency = .04
-    im.ImageRectOffset = ICONS[tab][1]
-    im.ImageRectSize = ICONS[tab][2]
-    im.Size = UDim2.new(0,22,0,22)
-    im.Position = UDim2.new(0,8,.5,-11)
-    im.Parent = parent
+local function icon(parent,tab)
+    local im=add(Instance.new("ImageLabel"))
+    im.BackgroundTransparency=1
+    im.Image=ICON_SHEET
+    im.ImageColor3=Color3.fromRGB(145,145,145)
+    im.ImageRectOffset=ICONS[tab][1]
+    im.ImageRectSize=ICONS[tab][2]
+    im.Size=UDim2.new(0,24,0,24)
+    im.Position=UDim2.new(0,7,.5,-12)
+    im.ZIndex=994
+    im.Parent=parent
     return im
 end
 
 local function page(name)
-    local p = add(Instance.new("ScrollingFrame"))
-    p.Name = name
-    p.Size = UDim2.fromScale(1,1)
-    p.BackgroundTransparency = 1
-    p.BorderSizePixel = 0
-    p.ScrollBarThickness = 2
-    p.ScrollBarImageTransparency = .45
-    p.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    p.CanvasSize = UDim2.new()
-    p.Visible = false
-    p.ZIndex = 56
-    p.Parent = content
-
-    local l = add(Instance.new("UIListLayout"))
-    l.Padding = UDim.new(0,7)
-    l.Parent = p
-
-    pages[name] = p
+    local p=add(Instance.new("ScrollingFrame"))
+    p.Name=name
+    p.Size=UDim2.fromScale(1,1)
+    p.BackgroundTransparency=1
+    p.BorderSizePixel=0
+    p.ScrollBarThickness=2
+    p.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    p.CanvasSize=UDim2.new()
+    p.Visible=false
+    p.ZIndex=1001
+    p.Parent=content
+    local l=add(Instance.new("UIListLayout"))
+    l.Padding=UDim.new(0,7)
+    l.Parent=p
+    pages[name]=p
     return p
 end
 
-for order, name in ipairs(tabs) do
-    local b = mkButton(nav)
-    b.LayoutOrder = order
-    b.Size = UDim2.new(1,0,0,39)
-    b.ZIndex = 58
-    b.BackgroundColor3 = Color3.fromRGB(25,25,25)
-    b.BackgroundTransparency = 1
-    b.Parent = nav
+for order,name in ipairs(tabs) do
+    local b=mkButton(nav)
+    b.Size=UDim2.new(1,0,0,40)
+    b.Position=UDim2.new(0,0,0,(order-1)*48)
+    b.ZIndex=1007
+    b.BackgroundColor3=Color3.fromRGB(25,25,25)
+    b.BackgroundTransparency=1
+    b.Parent=nav
     uiCorner(b,9)
-
     icon(b,name)
-
-    local tx = text(b,name,11,Enum.Font.GothamMedium)
-    tx.Position = UDim2.new(0,38,0,0)
-    tx.Size = UDim2.new(1,-42,1,0)
-    tx.TextColor3 = Color3.fromRGB(145,145,145)
-
-    tabButtons[name] = {button=b,label=tx}
+    local tx=text(b,name,11,Enum.Font.GothamMedium)
+    tx.Position=UDim2.new(0,40,0,0)
+    tx.Size=UDim2.new(1,-45,1,0)
+    tx.TextColor3=Color3.fromRGB(145,145,145)
+    tx.ZIndex=995
+    tabButtons[name]={button=b,label=tx}
     page(name)
 end
 
@@ -410,7 +399,7 @@ local function setTab(name)
     S.tab=name
     for n,v in pairs(tabButtons) do
         local active=n==name
-        v.button.BackgroundTransparency=active and .78 or 1
+        v.button.BackgroundTransparency=active and .70 or 1
         v.label.TextColor3=active and Color3.fromRGB(240,240,240) or Color3.fromRGB(145,145,145)
         pages[n].Visible=active
     end
@@ -493,7 +482,7 @@ drawer.Size=UDim2.new(0,330,0,0)
 drawer.AnchorPoint=Vector2.new(1,.5)
 drawer.Position=UDim2.new(1,-16,.5,0)
 drawer.Visible=false
-drawer.ZIndex=120
+drawer.ZIndex=1100
 uiCorner(drawer,14)
 uiStroke(drawer,.84)
 
@@ -505,6 +494,19 @@ local drawerHint=text(drawer,"Private-test target selector",9,Enum.Font.Gotham)
 drawerHint.Position=UDim2.new(0,17,0,40)
 drawerHint.Size=UDim2.new(1,-34,0,18)
 drawerHint.TextColor3=Color3.fromRGB(105,105,105)
+
+local drawerClose=mkButton(drawer)
+drawerClose.Size=UDim2.new(0,28,0,28)
+drawerClose.Position=UDim2.new(1,-38,0,10)
+drawerClose.BackgroundColor3=Color3.fromRGB(30,30,30)
+drawerClose.Text="×"
+drawerClose.TextColor3=Color3.fromRGB(190,190,190)
+drawerClose.TextSize=18
+drawerClose.Font=Enum.Font.GothamBold
+drawerClose.ZIndex=1120
+drawerClose.Parent=drawer
+uiCorner(drawerClose,14)
+
 
 local drawerBody=newFrame(drawer,Color3.new(0,0,0),1)
 drawerBody.Position=UDim2.new(0,15,0,70)
@@ -609,11 +611,49 @@ local function closeDrawer()
     end)
 end
 
+conn(drawerClose.MouseButton1Click:Connect(closeDrawer))
+
+local openMovementDrawer
+local openAimDrawer
+
+-- Movement settings
+local function clearDrawerBody()
+    for _,x in ipairs(drawerBody:GetChildren()) do
+        if x:IsA("GuiObject") then x:Destroy() end
+    end
+end
+openMovementDrawer = function(mode)
+    drawerTitle.Text=mode.." Settings"
+    drawerHint.Text="Movement configuration"
+    clearDrawerBody()
+    if mode=="Fly" then
+        settingSlider(drawerBody,"Fly speed",10,120,function() return S.FlySpeed end,function(v) S.FlySpeed=v end)
+    elseif mode=="Bunny Hop" then
+        settingSlider(drawerBody,"Hop speed",8,40,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
+        settingToggle(drawerBody,"Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end)
+    elseif mode=="Spin" then
+        settingSlider(drawerBody,"Spin speed",1,30,function() return S.SpinSpeed end,function(v) S.SpinSpeed=v end)
+    end
+    openDrawer()
+end
+
+openAimDrawer = function()
+    clearDrawerBody()
+    drawerTitle.Text="Silent Aim Settings"
+    drawerHint.Text="Private-test target selection"
+    settingSlider(drawerBody,"FOV",60,420,function() return S.FOV end,function(v) S.FOV=v end)
+    settingSlider(drawerBody,"Smoothness",.02,.8,function() return S.AimSmooth end,function(v) S.AimSmooth=v end)
+    settingToggle(drawerBody,"Line of sight",function() return S.AimLOS end,function(v) S.AimLOS=v end)
+    settingToggle(drawerBody,"Players",function() return S.AimPlayers end,function(v) S.AimPlayers=v end)
+    settingToggle(drawerBody,"NPC / dummy",function() return S.AimNPCOnly end,function(v) S.AimNPCOnly=v end)
+    openDrawer()
+end
+
 -- Combat
 heading(pages.Combat,"SHERIFF • PRIVATE TEST")
-card(pages.Combat,"Silent Aim","FOV target selector for authorized NPCs / dummies",function(v) S.AimEnabled=v end,openDrawer)
+card(pages.Combat,"Silent Aim","FOV aim-assist target selector for private-test players / dummies",function(v) S.AimEnabled=v end,openAimDrawer)
 card(pages.Combat,"Auto Shot Murder","Role-state QA trigger preview",function(v) S.AutoShot=v end)
-card(pages.Combat,"FOV","Targeting circle used by the aim tester",function(v) S.FOVEnabled=v end)
+card(pages.Combat,"FOV","Targeting circle used by the aim tester",function(v) S.FOVEnabled=v end,openAimDrawer)
 
 heading(pages.Combat,"MURDER • PRIVATE TEST")
 card(pages.Combat,"Kill Aura","Authorized target range tester",function(v) S.KillAura=v end)
@@ -694,10 +734,30 @@ card(pages.Visuals,"Ping","Display network latency in milliseconds",function(v) 
 
 -- Misc
 heading(pages.Misc,"MOVEMENT TESTS")
-card(pages.Misc,"Fly","Camera-relative movement prototype",function(v) S.Fly=v end)
-card(pages.Misc,"Bunny Hop","Automatic jump timing",function(v) S.BunnyHop=v end)
-card(pages.Misc,"No Clip","Local collision test",function(v) S.NoClip=v end)
-card(pages.Misc,"Spin","Character rotation test",function(v) S.Spin=v end)
+card(pages.Misc,"Fly","Camera-relative flight",function(v)
+    S.Fly=v
+    if not v then
+        S.FlyVertical=0
+        local root=LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then root.AssemblyLinearVelocity=Vector3.zero end
+    end
+end,function() openMovementDrawer("Fly") end)
+card(pages.Misc,"Bunny Hop","CS-style auto-jump timing",function(v)
+    S.BunnyHop=v
+    if not v then
+        local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum and S.saved.WalkSpeed then hum.WalkSpeed=S.saved.WalkSpeed end
+    end
+end,function() openMovementDrawer("Bunny Hop") end)
+card(pages.Misc,"No Clip","Disable character collisions",function(v)
+    S.NoClip=v
+    if not v and LocalPlayer.Character then
+        for _,part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then pcall(function() part.CanCollide=true end) end
+        end
+    end
+end)
+card(pages.Misc,"Spin","Continuous character rotation",function(v) S.Spin=v end,function() openMovementDrawer("Spin") end)
 
 heading(pages.Misc,"TARGET MOVEMENT TEST")
 card(pages.Misc,"Sex Aura","Target movement tester for authorized targets",function(v) S.TargetMovement=v end)
@@ -758,12 +818,6 @@ conn(plus.MouseButton1Click:Connect(function()
     updateScale()
 end))
 
--- Drawer controls
-settingSlider(drawerBody,"FOV",60,420,function() return S.FOV end,function(v) S.FOV=v end)
-settingSlider(drawerBody,"Smoothness",.02,.8,function() return S.AimSmooth end,function(v) S.AimSmooth=v end)
-settingToggle(drawerBody,"Line of sight",function() return S.AimLOS end,function(v) S.AimLOS=v end)
-settingToggle(drawerBody,"NPC / dummy only",function() return S.AimNPCOnly end,function(v) S.AimNPCOnly=v end)
-
 -- Navigation
 for name,ref in pairs(tabButtons) do
     conn(ref.button.MouseButton1Click:Connect(function()
@@ -772,45 +826,41 @@ for name,ref in pairs(tabButtons) do
 end
 setTab("Combat")
 
--- Dragging: works with mouse and touch and does not steal clicks from controls.
-local function makeDraggable(obj, handle)
-    local dragging=false
-    local dragInput
-    local start
-    local origin
+-- Dedicated drag surface prevents touch-dragging from rotating the camera.
+local dragSurface=add(Instance.new("TextButton"))
+dragSurface.Name="HirukuDragSurface"
+dragSurface.BackgroundTransparency=1
+dragSurface.Text=""
+dragSurface.AutoButtonColor=false
+dragSurface.Active=true
+dragSurface.Modal=false
+dragSurface.Size=UDim2.fromScale(1,1)
+dragSurface.ZIndex=981
+dragSurface.Parent=menu
 
+local function makeDraggable(obj,handle)
+    local dragging=false
+    local start,origin
+    handle.Active=true
     conn(handle.InputBegan:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.MouseButton1
-        or input.UserInputType==Enum.UserInputType.Touch then
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
             dragging=true
-            dragInput=input
             start=input.Position
             origin=obj.Position
         end
     end))
-
     conn(handle.InputEnded:Connect(function(input)
-        if input==dragInput
-        or input.UserInputType==Enum.UserInputType.MouseButton1
-        or input.UserInputType==Enum.UserInputType.Touch then
-            dragging=false
-        end
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=false end
     end))
-
     conn(UserInputService.InputChanged:Connect(function(input)
         if not dragging then return end
-        if input.UserInputType~=Enum.UserInputType.MouseMovement
-        and input.UserInputType~=Enum.UserInputType.Touch then return end
-
-        local delta=input.Position-start
-        obj.Position=UDim2.new(
-            origin.X.Scale,origin.X.Offset+delta.X,
-            origin.Y.Scale,origin.Y.Offset+delta.Y
-        )
+        if input.UserInputType~=Enum.UserInputType.MouseMovement and input.UserInputType~=Enum.UserInputType.Touch then return end
+        local d=input.Position-start
+        obj.Position=UDim2.new(origin.X.Scale,origin.X.Offset+d.X,origin.Y.Scale,origin.Y.Offset+d.Y)
     end))
 end
-
 makeDraggable(pill,pill)
+makeDraggable(menu,dragSurface)
 makeDraggable(menu,header)
 
 -- Menu open/close
@@ -841,10 +891,39 @@ conn(UserInputService.InputBegan:Connect(function(input,gpe)
     end
 end))
 
+-- Mobile flight buttons
+local flyControls=newFrame(gui,Color3.new(0,0,0),1)
+flyControls.Size=UDim2.new(0,132,0,60)
+flyControls.AnchorPoint=Vector2.new(1,1)
+flyControls.Position=UDim2.new(1,-22,1,-105)
+flyControls.ZIndex=970
+flyControls.Visible=false
+local function flyBtn(txt,x)
+    local b=mkButton(flyControls)
+    b.Position=UDim2.new(0,x,0,0)
+    b.Size=UDim2.new(0,58,0,58)
+    b.BackgroundColor3=Color3.fromRGB(10,10,10)
+    b.BackgroundTransparency=.2
+    b.Text=txt
+    b.TextColor3=Color3.fromRGB(235,235,235)
+    b.TextSize=20
+    b.Font=Enum.Font.GothamBold
+    b.ZIndex=971
+    b.Parent=flyControls
+    uiCorner(b,29)
+    return b
+end
+local flyUp=flyBtn("↑",0)
+local flyDown=flyBtn("↓",72)
+conn(flyUp.MouseButton1Down:Connect(function() S.FlyVertical=1 end))
+conn(flyUp.MouseButton1Up:Connect(function() if S.FlyVertical==1 then S.FlyVertical=0 end end))
+conn(flyDown.MouseButton1Down:Connect(function() S.FlyVertical=-1 end))
+conn(flyDown.MouseButton1Up:Connect(function() if S.FlyVertical==-1 then S.FlyVertical=0 end end))
+
 -- FOV
 local fov=newFrame(gui,Color3.new(0,0,0),1)
 fov.AnchorPoint=Vector2.new(.5,.5)
-fov.ZIndex=30
+fov.ZIndex=900
 fov.Visible=false
 uiCorner(fov,999)
 local fovStroke=uiStroke(fov,.3)
@@ -853,6 +932,45 @@ fovStroke.Color=Color3.fromRGB(225,225,225)
 local function updateFov()
     fov.Size=UDim2.fromOffset(math.floor(S.FOV*2),math.floor(S.FOV*2))
     fov.Position=UDim2.fromOffset(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+end
+
+-- Camera aim-assist for authorized/private-test player sessions.
+local function getAimPart(model)
+    if not model or model==LocalPlayer.Character then return nil end
+    local hum=model:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health<=0 then return nil end
+    local part=model:FindFirstChild(S.AimTargetPart) or model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+    if not part then return nil end
+    local vp,on=Camera:WorldToViewportPoint(part.Position)
+    if not on or vp.Z<=0 then return nil end
+    local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+    local d=(Vector2.new(vp.X,vp.Y)-center).Magnitude
+    if d>S.FOV then return nil end
+    if S.AimLOS then
+        local rp=RaycastParams.new()
+        rp.FilterType=Enum.RaycastFilterType.Exclude
+        rp.FilterDescendantsInstances={LocalPlayer.Character,model}
+        if workspace:Raycast(Camera.CFrame.Position,part.Position-Camera.CFrame.Position,rp) then return nil end
+    end
+    return part,d
+end
+local function getAimTarget()
+    local best,bestD=nil,math.huge
+    if S.AimPlayers then
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr~=LocalPlayer then
+                local part,d=getAimPart(plr.Character)
+                if part and d<bestD then best,bestD=part,d end
+            end
+        end
+    end
+    for _,m in ipairs(workspace:GetDescendants()) do
+        if m:IsA("Model") and m:GetAttribute("HirukuTestTarget")==true then
+            local part,d=getAimPart(m)
+            if part and d<bestD then best,bestD=part,d end
+        end
+    end
+    return best
 end
 
 -- Role detection
@@ -891,16 +1009,26 @@ local function getRole(plr)
         end
 
         -- 3. Tool-based fallback. This avoids defaulting everyone to Innocent.
-        if c:FindFirstChild("Knife") then return "Murderer" end
-        if c:FindFirstChild("Gun") or c:FindFirstChild("Revolver") then return "Sheriff" end
+        if c:FindFirstChild("Knife",true) then return "Murderer" end
+        if c:FindFirstChild("Gun",true) or c:FindFirstChild("Revolver",true) then return "Sheriff" end
     end
 
     local backpack=plr:FindFirstChildOfClass("Backpack")
     if backpack then
-        if backpack:FindFirstChild("Knife") then return "Murderer" end
-        if backpack:FindFirstChild("Gun") or backpack:FindFirstChild("Revolver") then return "Sheriff" end
+        if backpack:FindFirstChild("Knife",true) then return "Murderer" end
+        if backpack:FindFirstChild("Gun",true) or backpack:FindFirstChild("Revolver",true) then return "Sheriff" end
     end
 
+    -- Common MM2-style replicated role values under PlayerData.
+    local pd=game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData")
+    local entry=pd and pd:FindFirstChild(plr.Name)
+    if entry then
+        for _,key in ipairs({"Role","RoleValue","PlayerRole"}) do
+            local obj=entry:FindFirstChild(key)
+            local rr=obj and normalizeRole(obj.Value)
+            if rr then return rr end
+        end
+    end
     return "Unknown"
 end
 
@@ -926,7 +1054,7 @@ local function applyVisual(plr)
     if not S.Chams and not S.RoleLabels then return end
 
     local role=getRole(plr)
-    local col=roleColors[role] or Color3.fromRGB(170,170,170)
+    local col=roleColors[role] or Color3.fromRGB(165,165,165)
 
     if S.Chams then
         local h=add(Instance.new("Highlight"))
@@ -980,7 +1108,7 @@ watermark.AnchorPoint=Vector2.new(.5,0)
 watermark.Position=UDim2.new(.5,0,0,16)
 watermark.Size=UDim2.new(0,330,0,34)
 watermark.Visible=false
-watermark.ZIndex=80
+watermark.ZIndex=950
 uiCorner(watermark,18)
 uiStroke(watermark,.84)
 
@@ -1065,7 +1193,7 @@ conn(RunService.Heartbeat:Connect(function(dt)
     end
 
     roleTick+=dt
-    if roleTick>=.65 then
+    if roleTick>=.30 then
         roleTick=0
         if S.Chams or S.RoleLabels then
             for _,plr in ipairs(Players:GetPlayers()) do
@@ -1080,16 +1208,33 @@ conn(RunService.Heartbeat:Connect(function(dt)
     local root,hum=getRootHum()
     if not root or not hum then return end
 
+    if S.AimEnabled then
+        local target=getAimTarget()
+        if target then
+            local desired=CFrame.lookAt(Camera.CFrame.Position,target.Position)
+            Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(1-S.AimSmooth,0,1))
+        end
+    end
+
     if S.saved.WalkSpeed==nil then S.saved.WalkSpeed=hum.WalkSpeed end
     if S.saved.JumpPower==nil then S.saved.JumpPower=hum.JumpPower end
 
-    if S.BunnyHop and hum.FloorMaterial~=Enum.Material.Air then
-        hum.Jump=true
+    if S.BunnyHop then
+        hum.WalkSpeed=S.BunnySpeed
+        if hum.FloorMaterial~=Enum.Material.Air then
+            hum.Jump=true
+            if S.BunnyAutoStrafe and hum.MoveDirection.Magnitude>0 then
+                local md=hum.MoveDirection
+                root.AssemblyLinearVelocity=Vector3.new(md.X*S.BunnySpeed,root.AssemblyLinearVelocity.Y,md.Z*S.BunnySpeed)
+            end
+        end
+    elseif S.saved.WalkSpeed and not S.Fly then
+        hum.WalkSpeed=S.saved.WalkSpeed
     end
 
     if S.NoClip then
-        for _,p in ipairs(LocalPlayer.Character:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide=false end
+        for _,part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide=false end
         end
     end
 
@@ -1097,22 +1242,20 @@ conn(RunService.Heartbeat:Connect(function(dt)
         root.CFrame=root.CFrame*CFrame.Angles(0,math.rad(S.SpinSpeed*dt*60),0)
     end
 
+    flyControls.Visible=S.Fly
     if S.Fly then
-        local dir=Vector3.zero
         local cf=Camera.CFrame
-
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir+=cf.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir-=cf.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir+=cf.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir-=cf.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir+=Vector3.yAxis end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir-=Vector3.yAxis end
-
-        if dir.Magnitude>0 then
-            root.AssemblyLinearVelocity=dir.Unit*S.FlySpeed
-        else
-            root.AssemblyLinearVelocity=Vector3.zero
-        end
+        local dir=hum.MoveDirection
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir=cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir=-cf.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir=cf.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir=-cf.RightVector end
+        dir=Vector3.new(dir.X,0,dir.Z)
+        local vertical=S.FlyVertical
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vertical=1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vertical=-1 end
+        dir=dir+Vector3.new(0,vertical,0)
+        if dir.Magnitude>0 then root.AssemblyLinearVelocity=dir.Unit*S.FlySpeed else root.AssemblyLinearVelocity=Vector3.zero end
     end
 
     -- Private target movement tester.
