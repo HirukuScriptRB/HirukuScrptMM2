@@ -31,6 +31,7 @@ local S = {
     Open = false,
     Page = "Combat",
 
+    AimBot = false,
     SilentAim = false,
     SilentFOV = 180,
     SilentSmooth = 0.18,
@@ -80,6 +81,7 @@ local S = {
     TargetAuraSpeed = 55,
 
     CoinFarm = false,
+    CoinRadar = false,
     CoinSpeed = 65,
     CoinRadius = 999999,
 
@@ -101,6 +103,7 @@ local INSTANCES = {}
 local CHAMS = {}
 local ROLE_LABELS = {}
 local GUN_ESPS = {}
+local COIN_RADAR = {}
 local DRAG = {active=false, input=nil, start=nil, origin=nil}
 local GUI_SCALE_OBJECT = nil
 local originalWalkSpeed = nil
@@ -406,7 +409,7 @@ local function addAnimatedTextGradient(obj)
     task.spawn(function()
         while obj.Parent do
             g.Offset = Vector2.new(-1,0)
-            local tw = TweenService:Create(g,TweenInfo.new(2.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Offset=Vector2.new(1,0)})
+            local tw = TweenService:Create(g,TweenInfo.new(5.5,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Offset=Vector2.new(1,0)})
             tw:Play()
             tw.Completed:Wait()
             task.wait(.12)
@@ -781,6 +784,52 @@ drawer.Visible = false
 
 local drawerTitle = label(drawer,"Settings",UDim2.new(1,-60,0,32),UDim2.fromOffset(18,15),17,T().text,710)
 local drawerClose = button(drawer,"×",UDim2.fromOffset(32,32),UDim2.new(1,-47,0,12),710)
+local drawerDragArea = Instance.new("TextButton")
+drawerDragArea.Name="DrawerDragArea"
+drawerDragArea.Text=""
+drawerDragArea.AutoButtonColor=false
+drawerDragArea.BackgroundTransparency=1
+drawerDragArea.BorderSizePixel=0
+drawerDragArea.Size=UDim2.new(1,-58,0,52)
+drawerDragArea.Position=UDim2.fromOffset(4,2)
+drawerDragArea.ZIndex=714
+drawerDragArea.Active=true
+drawerDragArea.Selectable=false
+drawerDragArea.Parent=drawer
+
+local DRAWER_DRAG={active=false,input=nil,start=nil,origin=nil}
+conn(drawerDragArea.InputBegan:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
+        DRAWER_DRAG.active=true
+        DRAWER_DRAG.input=input
+        DRAWER_DRAG.start=input.Position
+        DRAWER_DRAG.origin=drawer.Position
+    end
+end))
+conn(drawerDragArea.InputChanged:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement then
+        DRAWER_DRAG.input=input
+    end
+end))
+conn(UIS.InputChanged:Connect(function(input)
+    if not DRAWER_DRAG.active or not DRAWER_DRAG.start or not DRAWER_DRAG.origin then return end
+    if input.UserInputType~=Enum.UserInputType.Touch and input.UserInputType~=Enum.UserInputType.MouseMovement then return end
+    local delta=input.Position-DRAWER_DRAG.start
+    local vp=Camera.ViewportSize
+    local w,h=drawer.AbsoluteSize.X,drawer.AbsoluteSize.Y
+    local x=math.clamp(DRAWER_DRAG.origin.X.Offset+delta.X,8,math.max(8,vp.X-w-8))
+    local y=math.clamp(DRAWER_DRAG.origin.Y.Offset+delta.Y,8,math.max(8,vp.Y-h-8))
+    drawer.Position=UDim2.fromOffset(x,y)
+end))
+conn(UIS.InputEnded:Connect(function(input)
+    if DRAWER_DRAG.active and (input==DRAWER_DRAG.input or input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1) then
+        DRAWER_DRAG.active=false
+        DRAWER_DRAG.input=nil
+        DRAWER_DRAG.start=nil
+        DRAWER_DRAG.origin=nil
+    end
+end))
+
 local drawerBody = Instance.new("ScrollingFrame")
 drawerBody.BackgroundTransparency = 1
 drawerBody.BorderSizePixel = 0
@@ -888,8 +937,8 @@ resetPage("Combat")
 local combat = pages.Combat
 section(combat,"SHERIFF",4)
 
-toggleCard(combat,"Silent Aim","Camera aim assist inside FOV",function() return S.SilentAim end,function(v) S.SilentAim=v end,function()
-    openDrawer("Silent Aim",function()
+toggleCard(combat,"Aim Bot","Camera aim assist inside FOV",function() return S.AimBot end,function(v) S.AimBot=v end,function()
+    openDrawer("Aim Bot",function()
         local y=4
         local function dt(t,get,set)
             drawerToggle(t,get,set,y); y=y+48
@@ -931,6 +980,14 @@ toggleCard(combat,"Auto Shot Murder","Automatic shot trigger when a valid murder
 toggleCard(combat,"FOV","Display Silent Aim field of view",function() return S.FOV end,function(v) S.FOV=v end,function()
     openDrawer("FOV",function()
         sliderCard(drawerBody,"FOV radius",50,500,function() return S.SilentFOV end,function(v) S.SilentFOV=v end)
+    end)
+end)
+
+toggleCard(combat,"Silent Aim","FOV target indicator; does not alter network/projectile data",function() return S.SilentAim end,function(v) S.SilentAim=v end,function()
+    openDrawer("Silent Aim",function()
+        drawerToggle("Enabled",function() return S.SilentAim end,function(v) S.SilentAim=v end,4)
+        drawerToggle("Line of sight",function() return S.SilentLOS end,function(v) S.SilentLOS=v end,52)
+        drawerToggle("Players",function() return S.SilentPlayers end,function(v) S.SilentPlayers=v end,100)
     end)
 end)
 
@@ -1001,7 +1058,7 @@ toggleCard(visuals,"Sky Color","Tint the local sky and environment",function() r
 end)
 toggleCard(visuals,"Ambient Boost","Raise local ambient lighting",function() return S.AmbientBoost end,function(v) S.AmbientBoost=v end)
 section(visuals,"COINS",350)
-toggleCard(visuals,"Coin Radar","Mark objects named Coin",function() return false end,function(v) end)
+toggleCard(visuals,"Coin Radar","Highlight nearby MM2 coins",function() return S.CoinRadar end,function(v) S.CoinRadar=v; if not v then clearCoinRadar() end end)
 
 --==================================================
 -- MISC
@@ -1127,10 +1184,18 @@ toggleCard(settings,"Font","Change menu typography",function() return false end,
 end)
 
 sliderCard(settings,"Interface size",80,120,function() return S.UIScale*100 end,function(v)
+    local vp=Camera.ViewportSize
+    local oldCenter=main.AbsolutePosition + main.AbsoluteSize/2
     S.UIScale=math.clamp(v/100,.80,1.20)
     scaleGui()
     fitWindow()
     updateResponsiveLayout()
+    if S.Open then
+        local newSize=main.AbsoluteSize
+        local x=math.clamp(oldCenter.X-newSize.X/2,8,math.max(8,vp.X-newSize.X-8))
+        local y=math.clamp(oldCenter.Y-newSize.Y/2,8,math.max(8,vp.Y-newSize.Y-8))
+        main.Position=UDim2.fromOffset(x,y)
+    end
 end)
 toggleCard(settings,"Show Notifications","Show status messages in the lower-left",function() return S._showNotifications~=false end,function(v) S._showNotifications=v end)
 sliderCard(settings,"Menu Opacity",50,95,function() return S.MenuOpacity*100 end,function(v)
@@ -1428,6 +1493,56 @@ end
 -- COIN / GUN SEARCH
 --==================================================
 
+local function clearCoinRadar()
+    for obj,hl in pairs(COIN_RADAR) do
+        pcall(function() hl:Destroy() end)
+        COIN_RADAR[obj]=nil
+    end
+end
+
+local function coinPart(obj)
+    if obj:IsA("BasePart") then return obj end
+    if obj:IsA("Model") then
+        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true)
+    end
+    return obj:FindFirstChildWhichIsA("BasePart",true)
+end
+
+local function refreshCoinRadar()
+    if not S.CoinRadar then
+        clearCoinRadar()
+        return
+    end
+    local seen={}
+    for _,d in ipairs(Workspace:GetDescendants()) do
+        local n=d.Name:lower()
+        if n=="coin" or n=="coin_server" or n=="coinvisual" then
+            local part=coinPart(d)
+            if part and part:IsDescendantOf(Workspace) then
+                seen[part]=true
+                if not COIN_RADAR[part] then
+                    local hl=Instance.new("Highlight")
+                    hl.Name="HirukuCoinRadar"
+                    hl.Adornee=part
+                    hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.FillTransparency=.72
+                    hl.OutlineTransparency=.05
+                    hl.FillColor=Color3.fromRGB(255,220,70)
+                    hl.OutlineColor=Color3.fromRGB(255,245,170)
+                    hl.Parent=gui
+                    COIN_RADAR[part]=hl
+                end
+            end
+        end
+    end
+    for part,hl in pairs(COIN_RADAR) do
+        if not seen[part] or not part.Parent then
+            pcall(function() hl:Destroy() end)
+            COIN_RADAR[part]=nil
+        end
+    end
+end
+
 local function findNamedNearest(name)
     local rr=root(char())
     if not rr then return nil end
@@ -1592,12 +1707,12 @@ conn(RunService.RenderStepped:Connect(function(dt)
     aimClock += dt
     if aimClock >= .045 then
         aimClock=0
-        if S.SilentAim then cachedAim=bestTarget() else cachedAim=nil end
+        if S.AimBot then cachedAim=bestTarget() else cachedAim=nil end
     end
-    if S.SilentAim and cachedAim and UIS.MouseEnabled == false then
+    if S.AimBot and cachedAim and UIS.MouseEnabled == false then
         local desired=CFrame.lookAt(Camera.CFrame.Position,cachedAim.Position)
         Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(S.SilentSmooth*3,0,1))
-    elseif S.SilentAim and cachedAim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+    elseif S.AimBot and cachedAim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local desired=CFrame.lookAt(Camera.CFrame.Position,cachedAim.Position)
         Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(S.SilentSmooth*3,0,1))
     end
@@ -1858,12 +1973,18 @@ end
 
 local lastTheme, lastFont = nil, nil
 local visualClock=0
+local coinRadarClock=0
 conn(RunService.Heartbeat:Connect(function(dt)
     if lastTheme ~= S.Theme or lastFont ~= S.Font then
         lastTheme, lastFont = S.Theme, S.Font
         applyStyle(gui)
     end
     visualClock += dt
+    coinRadarClock += dt
+    if coinRadarClock >= .50 then
+        coinRadarClock=0
+        refreshCoinRadar()
+    end
     if visualClock >= .20 then
         visualClock=0
         if S.Chams or S.RoleLabels then
@@ -1937,14 +2058,19 @@ function S.Cleanup()
     S.BunnyHop=false
     S.Spin=false
     S.CoinFarm=false
+    S.CoinRadar=false
+    S.AimBot=false
+    S.SilentAim=false
     S.AutoPickupGun=false
     disconnectAll()
     for p in pairs(CHAMS) do pcall(function() CHAMS[p]:Destroy() end) end
     for p in pairs(ROLE_LABELS) do pcall(function() ROLE_LABELS[p]:Destroy() end) end
     for o in pairs(GUN_ESPS) do pcall(function() GUN_ESPS[o]:Destroy() end) end
+    clearCoinRadar()
     table.clear(CHAMS)
     table.clear(ROLE_LABELS)
     table.clear(GUN_ESPS)
+    table.clear(COIN_RADAR)
     stopFly()
     restoreMovementDefaults()
     Lighting.Ambient=savedLighting.Ambient
@@ -1999,7 +2125,6 @@ conn(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     fitWindow()
     updateResponsiveLayout()
 end))
-conn(main:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateResponsiveLayout))
 setPage("Combat")
 search.Text = ""
 refreshVisuals()
