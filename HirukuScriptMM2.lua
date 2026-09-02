@@ -1,9 +1,3 @@
---// HIRUKU MM2 V14
---// Mobile movement, Coin farming, pickup routing and animated typography refresh.
---// Mobile-first Roblox UI
---// Features: animated menu, themes, fonts, role-aware visuals, aim assist,
---// movement utilities, coin collection, weapon pickup, target movement and
---// cleanup-safe rerun handling.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -16,9 +10,6 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
---==================================================
--- CONFIG / STATE
---==================================================
 
 local GKEY = "__HIRUKU_MM2_V12"
 pcall(function()
@@ -31,7 +22,6 @@ local S = {
     Open = false,
     Page = "Combat",
 
-    AimBot = false,
     SilentAim = false,
     SilentFOV = 180,
     SilentSmooth = 0.18,
@@ -89,7 +79,9 @@ local S = {
 
     AntiAFK = false,
 
-    Theme = "Obsidian",
+    Theme = "Crimson",
+    CameraFOVEnabled = false,
+    CameraFOV = 70,
     Font = "Gotham",
     UIScale = 1.0,
     MenuOpacity = .90,
@@ -104,6 +96,8 @@ local CHAMS = {}
 local ROLE_LABELS = {}
 local GUN_ESPS = {}
 local COIN_RADAR = {}
+local COLUMN_HEADERS = {}
+local COLUMN_SHELLS = {}
 local DRAG = {active=false, input=nil, start=nil, origin=nil}
 local GUI_SCALE_OBJECT = nil
 local originalWalkSpeed = nil
@@ -169,9 +163,6 @@ local function isAuthorizedTarget(plr)
     return ok and friend == true
 end
 
---==================================================
--- THEMES / FONTS
---==================================================
 
 local THEMES = {
     Obsidian = {
@@ -230,6 +221,11 @@ local THEMES = {
         onDot = Color3.fromRGB(30,12,15),
         offDot = Color3.fromRGB(205,175,178),
     },
+    Aurora = {bg=Color3.fromRGB(7,20,20),panel=Color3.fromRGB(12,31,31),card=Color3.fromRGB(18,43,42),card2=Color3.fromRGB(23,55,53),text=Color3.fromRGB(236,255,250),sub=Color3.fromRGB(145,190,184),accent=Color3.fromRGB(105,255,210),line=Color3.fromRGB(40,82,78),on=Color3.fromRGB(130,245,210),off=Color3.fromRGB(47,75,70),onDot=Color3.fromRGB(10,30,27),offDot=Color3.fromRGB(170,205,198)},
+    Ocean = {bg=Color3.fromRGB(6,16,27),panel=Color3.fromRGB(10,27,43),card=Color3.fromRGB(15,37,58),card2=Color3.fromRGB(20,47,72),text=Color3.fromRGB(237,249,255),sub=Color3.fromRGB(145,177,197),accent=Color3.fromRGB(85,195,255),line=Color3.fromRGB(36,68,91),on=Color3.fromRGB(100,205,255),off=Color3.fromRGB(43,66,84),onDot=Color3.fromRGB(9,26,41),offDot=Color3.fromRGB(170,200,215)},
+    Rose = {bg=Color3.fromRGB(22,9,17),panel=Color3.fromRGB(34,14,27),card=Color3.fromRGB(48,19,37),card2=Color3.fromRGB(61,24,46),text=Color3.fromRGB(255,242,248),sub=Color3.fromRGB(198,157,178),accent=Color3.fromRGB(255,115,174),line=Color3.fromRGB(91,43,66),on=Color3.fromRGB(255,135,185),off=Color3.fromRGB(78,43,62),onDot=Color3.fromRGB(34,12,26),offDot=Color3.fromRGB(215,175,195)},
+    Amber = {bg=Color3.fromRGB(21,15,7),panel=Color3.fromRGB(34,24,10),card=Color3.fromRGB(48,34,14),card2=Color3.fromRGB(62,43,17),text=Color3.fromRGB(255,249,235),sub=Color3.fromRGB(198,177,136),accent=Color3.fromRGB(255,190,75),line=Color3.fromRGB(91,67,31),on=Color3.fromRGB(255,198,90),off=Color3.fromRGB(77,62,38),onDot=Color3.fromRGB(37,25,8),offDot=Color3.fromRGB(218,194,145)},
+    Carbon = {bg=Color3.fromRGB(12,12,13),panel=Color3.fromRGB(21,22,24),card=Color3.fromRGB(30,31,34),card2=Color3.fromRGB(39,40,43),text=Color3.fromRGB(248,248,248),sub=Color3.fromRGB(158,160,166),accent=Color3.fromRGB(190,195,205),line=Color3.fromRGB(58,60,65),on=Color3.fromRGB(205,210,220),off=Color3.fromRGB(57,59,64),onDot=Color3.fromRGB(18,19,21),offDot=Color3.fromRGB(188,190,195)},
     Mono = {
         bg = Color3.fromRGB(22,22,22),
         panel = Color3.fromRGB(29,29,29),
@@ -263,9 +259,6 @@ local function T()
     return THEMES[S.Theme] or THEMES.Obsidian
 end
 
---==================================================
--- GUI HELPERS
---==================================================
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "Hiruku"
@@ -359,18 +352,12 @@ local function scaleGui()
     GUI_SCALE_OBJECT.Scale = math.clamp(S.UIScale, 0.80, 1.20)
 end
 
---==================================================
--- OPEN/CLOSE PILL
---==================================================
 
 local pill = frame(gui, UDim2.fromOffset(148,46), UDim2.new(0,22,0.5,-23), T().panel, .08, 100)
 corner(pill, 23)
 stroke(pill, T().line, .15)
 local pillText = label(pill, "Hiruku", UDim2.fromScale(1,1), UDim2.fromOffset(0,0), 15, T().text, 105, Enum.TextXAlignment.Center)
 
---==================================================
--- MAIN WINDOW
---==================================================
 
 local fitWindow
 
@@ -382,8 +369,6 @@ stroke(main, T().line, .1, 1)
 local glass = frame(main, UDim2.fromScale(1,1), UDim2.fromScale(0,0), T().panel, .42, 201)
 corner(glass,18)
 
--- Frosted-glass layers: blur stays visually contained inside the menu.
--- No Lighting BlurEffect is used, so the actual game view remains sharp.
 local frostA = frame(main, UDim2.new(1,-6,1,-6), UDim2.fromOffset(3,3), Color3.fromRGB(255,255,255), .965, 202)
 corner(frostA,16)
 local frostB = frame(main, UDim2.new(1,-18,1,-18), UDim2.fromOffset(9,9), Color3.fromRGB(255,255,255), .985, 203)
@@ -439,53 +424,64 @@ search.ZIndex = 225
 search.Parent = main
 corner(search,19)
 
-local nav = frame(main, UDim2.fromOffset(150,340), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 225)
-corner(nav,12)
-local content = frame(main, UDim2.new(1,-190,1,-150), UDim2.fromOffset(174,135), Color3.new(0,0,0), 1, 225)
-
+local nav = frame(main, UDim2.fromOffset(0,0), UDim2.fromOffset(0,0), Color3.new(0,0,0), 1, 225)
+nav.Visible=false
+local content = frame(main, UDim2.new(1,-40,1,-150), UDim2.fromOffset(20,135), Color3.new(0,0,0), 1, 225)
 local pages = {}
 local navButtons = {}
 local pageLayout = {}
 local pageCursor = {}
+local pageNames = {"Combat","Movement","Render","Player","Misc"}
 
-local pageNames = {"Combat","Visuals","Misc","Settings"}
+for i,name in ipairs(pageNames) do
+    local shell=frame(content,UDim2.new(.2,-8,1,0),UDim2.fromOffset(0,0),T().panel,.08,226)
+    corner(shell,16)
+    stroke(shell,T().line,.12,1)
+    COLUMN_SHELLS[name]=shell
+    local header=frame(shell,UDim2.new(1,0,0,64),UDim2.fromOffset(0,0),T().panel,.02,228)
+    corner(header,16)
+    COLUMN_HEADERS[name]=header
+    local icon=label(header,name=="Combat" and "◆" or name=="Movement" and "↗" or name=="Render" and "◉" or name=="Player" and "●" or "▦",UDim2.fromOffset(32,32),UDim2.fromOffset(14,15),18,T().accent,235,Enum.TextXAlignment.Center)
+    local ht=label(header,name,UDim2.new(1,-58,0,32),UDim2.fromOffset(50,15),17,T().text,235)
+    local pg=Instance.new("ScrollingFrame")
+    pg.Name=name.."Page"
+    pg.BackgroundTransparency=1
+    pg.BorderSizePixel=0
+    pg.Size=UDim2.new(1,-16,1,-72)
+    pg.Position=UDim2.fromOffset(8,66)
+    pg.ScrollBarThickness=3
+    pg.ScrollBarImageTransparency=.35
+    pg.CanvasSize=UDim2.new(0,0,0,0)
+    pg.ScrollingDirection=Enum.ScrollingDirection.Y
+    pg.ZIndex=229
+    pg.Parent=shell
+    pages[name]=pg
+    pageLayout[name]={}
+    pageCursor[name]=0
+end
 
-for i, name in ipairs(pageNames) do
-    local y = (i-1)*72
-    local nb = button(nav, name, UDim2.new(1,-8,0,56), UDim2.fromOffset(4,y), 230)
-    navButtons[name] = nb
-
-    local pg = Instance.new("ScrollingFrame")
-    pg.Name = name .. "Page"
-    pg.BackgroundTransparency = 1
-    pg.BorderSizePixel = 0
-    pg.Size = UDim2.fromScale(1,1)
-    pg.Position = UDim2.fromOffset(0,0)
-    pg.ScrollBarThickness = 3
-    pg.ScrollBarImageTransparency = .35
-    pg.CanvasSize = UDim2.new(0,0,0,0)
-    pg.ScrollingDirection = Enum.ScrollingDirection.Y
-    pg.ZIndex = 225
-    pg.Parent = content
-    pages[name] = pg
-    pageLayout[name] = {}
-    pageCursor[name] = 0
+local function layoutColumns()
+    local gap=10
+    local n=#pageNames
+    local w=math.max(250,(content.AbsoluteSize.X-gap*(n-1))/n)
+    for i,name in ipairs(pageNames) do
+        local shell=COLUMN_SHELLS[name]
+        if shell then
+            shell.Size=UDim2.fromOffset(w,content.AbsoluteSize.Y)
+            shell.Position=UDim2.fromOffset((i-1)*(w+gap),0)
+        end
+    end
 end
 
 local function updateResponsiveLayout()
-    local mw=main.AbsoluteSize.X
-    local navW=math.clamp(mw*.22,132,160)
-    nav.Size=UDim2.fromOffset(navW,math.max(250,main.AbsoluteSize.Y-155))
-    content.Position=UDim2.fromOffset(navW+24,135)
-    content.Size=UDim2.new(1,-navW-44,1,-150)
+    content.Position=UDim2.fromOffset(20,135)
+    content.Size=UDim2.new(1,-40,1,-150)
+    layoutColumns()
 end
 
 local close = button(main, "×", UDim2.fromOffset(38,38), UDim2.new(1,-58,0,18), 230)
 close.TextSize = 22
 
---==================================================
--- MOBILE DRAGGING
---==================================================
 
 local dragArea = Instance.new("TextButton")
 dragArea.Name = "DragArea"
@@ -531,9 +527,6 @@ conn(UIS.InputEnded:Connect(function(input)
     end
 end))
 
---==================================================
--- NOTIFICATION
---==================================================
 
 local toast = frame(gui, UDim2.fromOffset(300,52), UDim2.new(0,18,1,-72), T().panel, .08, 500)
 corner(toast, 16)
@@ -550,9 +543,6 @@ local function notify(text)
     end)
 end
 
---==================================================
--- OPEN / CLOSE ANIMATION
---==================================================
 
 main.Visible = false
 local menuAnimating = false
@@ -589,12 +579,29 @@ local function openMenu()
     local th = target.Y.Offset
     local x = math.clamp((vp.X-tw)/2, 8, math.max(8,vp.X-tw-8))
     local y = math.clamp((vp.Y-th)/2, 8, math.max(8,vp.Y-th-8))
-    main.Position = UDim2.fromOffset(x, y + th/2)
-    main.Size = UDim2.fromOffset(tw, 0)
-    main.Visible = true
-    main.BackgroundTransparency = 1-S.MenuOpacity
+    main.Position=UDim2.fromOffset(x,y)
+    main.Size=target
+    main.Visible=true
+    main.BackgroundTransparency=1-S.MenuOpacity
+    for i,name in ipairs(pageNames) do
+        local shell=COLUMN_SHELLS[name]
+        if shell then
+            shell.Position=UDim2.new(.5,0,0,0)
+            shell.Size=UDim2.new(0,0,1,0)
+            shell.BackgroundTransparency=1
+        end
+    end
     animateMenuElements(true)
-    local t = tween(main,.34,{Position=UDim2.fromOffset(x,y),Size=target,BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)},Enum.EasingStyle.Quint)
+    local t=tween(main,.32,{BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)},Enum.EasingStyle.Quint)
+    for i,name in ipairs(pageNames) do
+        local shell=COLUMN_SHELLS[name]
+        if shell then
+            local gap=10
+            local w=math.max(250,(content.AbsoluteSize.X-gap*(#pageNames-1))/#pageNames)
+            local xx=(i-1)*(w+gap)
+            tween(shell,.38,{Position=UDim2.fromOffset(xx,0),Size=UDim2.fromOffset(w,content.AbsoluteSize.Y),BackgroundTransparency=.08},Enum.EasingStyle.Quint)
+        end
+    end
     t.Completed:Connect(function()
         menuAnimating = false
     end)
@@ -609,7 +616,6 @@ local function closeMenu()
     end
     menuAnimating = true
     S.Open = false
-    -- Close any open settings drawer at the same time.
     if drawer and drawer.Visible then
         drawer.Visible = false
     end
@@ -619,11 +625,12 @@ local function closeMenu()
     local scaledW = math.max(320, size.X)
     local scaledH = math.max(0, size.Y)
     local targetY = pos.Y.Offset + scaledH/2
-    local t = tween(main,.28,{
-        Position=UDim2.fromOffset(pos.X.Offset,targetY),
-        Size=UDim2.fromOffset(scaledW,0),
-        BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)
-    },Enum.EasingStyle.Quint)
+    local centerX=content.AbsoluteSize.X/2
+    for _,name in ipairs(pageNames) do
+        local shell=COLUMN_SHELLS[name]
+        if shell then tween(shell,.24,{Position=UDim2.fromOffset(centerX,0),Size=UDim2.fromOffset(0,content.AbsoluteSize.Y),BackgroundTransparency=1},Enum.EasingStyle.Quint) end
+    end
+    local t=tween(main,.28,{Position=UDim2.fromOffset(pos.X.Offset,targetY),Size=UDim2.fromOffset(scaledW,0),BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)},Enum.EasingStyle.Quint)
     t.Completed:Connect(function()
         if not S.Open then main.Visible=false end
         menuAnimating=false
@@ -637,9 +644,6 @@ conn(pill.InputBegan:Connect(function(i)
 end))
 conn(close.Activated:Connect(closeMenu))
 
---==================================================
--- CARD / TOGGLE / SLIDER
---==================================================
 
 local function pageKey(parent)
     if parent == drawerBody then return "__drawer" end
@@ -676,12 +680,14 @@ local function toggleCard(parent, name, desc, get, set, settingsFn)
     table.insert(pageLayout[key] or {}, true)
 
     local c = frame(parent, UDim2.new(1,-10,0,68), UDim2.fromOffset(5,y), T().card, .02, 235)
+    c.Name="HirukuCard"
     corner(c,11)
     local n = label(c,name,UDim2.new(1,-112,0,22),UDim2.fromOffset(14,7),13,T().text,240)
     local d = label(c,desc,UDim2.new(1,-112,0,19),UDim2.fromOffset(14,34),10,T().sub,240)
     d.TextTruncate = Enum.TextTruncate.AtEnd
 
     local sw = button(c,"",UDim2.fromOffset(44,24),UDim2.new(1,-58,.5,-12),245)
+    sw.Name="HirukuSwitch"
     corner(sw,13)
 
     local dot = frame(sw,UDim2.fromOffset(16,16),UDim2.fromOffset(4,4),T().offDot,0,246)
@@ -689,6 +695,7 @@ local function toggleCard(parent, name, desc, get, set, settingsFn)
 
     local function refresh()
         local on = get()
+        sw:SetAttribute("HirukuState",on)
         sw.BackgroundColor3 = on and T().on or T().off
         dot.BackgroundColor3 = on and T().onDot or T().offDot
         tween(dot,.16,{Position=on and UDim2.new(1,-20,.5,-8) or UDim2.fromOffset(4,4)})
@@ -703,7 +710,6 @@ local function toggleCard(parent, name, desc, get, set, settingsFn)
     conn(sw.Activated:Connect(activate))
     conn(c.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.Touch then
-            -- Card itself is touch-friendly, but do not steal drag input from the window.
         end
     end))
 
@@ -726,6 +732,7 @@ local function sliderCard(parent, name, min, max, get, set)
     table.insert(pageLayout[key] or {}, true)
 
     local c = frame(parent, UDim2.new(1,-10,0,68), UDim2.fromOffset(5,y), T().card, .02,235)
+    c.Name="HirukuCard"
     corner(c,11)
     local n = label(c,name,UDim2.new(.45,0,1,0),UDim2.fromOffset(14,0),13,T().text,240)
     local value = label(c,"",UDim2.fromOffset(70,20),UDim2.new(1,-84,.5,-10),11,T().sub,240,Enum.TextXAlignment.Right)
@@ -773,9 +780,6 @@ local function sliderCard(parent, name, min, max, get, set)
     return c
 end
 
---==================================================
--- DRAWERS
---==================================================
 
 drawer = frame(gui, UDim2.fromOffset(320,360), UDim2.new(.5,390,.5,-180), T().panel, .03, 700)
 corner(drawer,16)
@@ -784,50 +788,34 @@ drawer.Visible = false
 
 local drawerTitle = label(drawer,"Settings",UDim2.new(1,-60,0,32),UDim2.fromOffset(18,15),17,T().text,710)
 local drawerClose = button(drawer,"×",UDim2.fromOffset(32,32),UDim2.new(1,-47,0,12),710)
-local drawerDragArea = Instance.new("TextButton")
-drawerDragArea.Name="DrawerDragArea"
-drawerDragArea.Text=""
-drawerDragArea.AutoButtonColor=false
-drawerDragArea.BackgroundTransparency=1
-drawerDragArea.BorderSizePixel=0
-drawerDragArea.Size=UDim2.new(1,-58,0,52)
-drawerDragArea.Position=UDim2.fromOffset(4,2)
-drawerDragArea.ZIndex=714
-drawerDragArea.Active=true
-drawerDragArea.Selectable=false
-drawerDragArea.Parent=drawer
-
+local drawerDrag=Instance.new("TextButton")
+drawerDrag.BackgroundTransparency=1
+drawerDrag.AutoButtonColor=false
+drawerDrag.Text=""
+drawerDrag.Size=UDim2.new(1,-55,0,52)
+drawerDrag.Position=UDim2.fromOffset(4,2)
+drawerDrag.ZIndex=715
+drawerDrag.Active=true
+drawerDrag.Parent=drawer
 local DRAWER_DRAG={active=false,input=nil,start=nil,origin=nil}
-conn(drawerDragArea.InputBegan:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
-        DRAWER_DRAG.active=true
-        DRAWER_DRAG.input=input
-        DRAWER_DRAG.start=input.Position
-        DRAWER_DRAG.origin=drawer.Position
+conn(drawerDrag.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then
+        DRAWER_DRAG.active=true; DRAWER_DRAG.input=i; DRAWER_DRAG.start=i.Position; DRAWER_DRAG.origin=drawer.Position
     end
 end))
-conn(drawerDragArea.InputChanged:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement then
-        DRAWER_DRAG.input=input
-    end
+conn(drawerDrag.InputChanged:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseMovement then DRAWER_DRAG.input=i end
 end))
-conn(UIS.InputChanged:Connect(function(input)
-    if not DRAWER_DRAG.active or not DRAWER_DRAG.start or not DRAWER_DRAG.origin then return end
-    if input.UserInputType~=Enum.UserInputType.Touch and input.UserInputType~=Enum.UserInputType.MouseMovement then return end
-    local delta=input.Position-DRAWER_DRAG.start
+conn(UIS.InputChanged:Connect(function(i)
+    if not DRAWER_DRAG.active then return end
+    if i.UserInputType~=Enum.UserInputType.Touch and i.UserInputType~=Enum.UserInputType.MouseMovement then return end
+    local d=i.Position-DRAWER_DRAG.start
     local vp=Camera.ViewportSize
     local w,h=drawer.AbsoluteSize.X,drawer.AbsoluteSize.Y
-    local x=math.clamp(DRAWER_DRAG.origin.X.Offset+delta.X,8,math.max(8,vp.X-w-8))
-    local y=math.clamp(DRAWER_DRAG.origin.Y.Offset+delta.Y,8,math.max(8,vp.Y-h-8))
-    drawer.Position=UDim2.fromOffset(x,y)
+    drawer.Position=UDim2.fromOffset(math.clamp(DRAWER_DRAG.origin.X.Offset+d.X,8,math.max(8,vp.X-w-8)),math.clamp(DRAWER_DRAG.origin.Y.Offset+d.Y,8,math.max(8,vp.Y-h-8)))
 end))
-conn(UIS.InputEnded:Connect(function(input)
-    if DRAWER_DRAG.active and (input==DRAWER_DRAG.input or input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1) then
-        DRAWER_DRAG.active=false
-        DRAWER_DRAG.input=nil
-        DRAWER_DRAG.start=nil
-        DRAWER_DRAG.origin=nil
-    end
+conn(UIS.InputEnded:Connect(function(i)
+    if DRAWER_DRAG.active and (i==DRAWER_DRAG.input or i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1) then DRAWER_DRAG.active=false; DRAWER_DRAG.input=nil end
 end))
 
 local drawerBody = Instance.new("ScrollingFrame")
@@ -891,9 +879,6 @@ local function drawerToggle(text, get, set, y)
     refresh()
 end
 
---==================================================
--- PAGES
---==================================================
 
 local function resetPage(pageName)
     for _, x in ipairs(pages[pageName]:GetChildren()) do
@@ -906,50 +891,32 @@ local function resetPage(pageName)
 end
 
 local function setPage(name)
-    S.Page = name
-    -- Never let an old search query make a new page look empty.
-    search.Text = ""
-    for p, pg in pairs(pages) do
-        pg.Visible = (p == name)
-        pg.Active = (p == name)
-        pg.ZIndex = 225
-    end
-    for p, b in pairs(navButtons) do
-        b.BackgroundColor3 = p == name and T().card2 or T().card
-        b.TextColor3 = p == name and T().text or T().sub
-        b.ZIndex = 230
-    end
-    if pages[name] then
-        pages[name].CanvasPosition = Vector2.zero
-        pages[name].CanvasSize = UDim2.new(0,0,0,(pageCursor[name] or 0)+16)
+    S.Page=name
+    search.Text=""
+    for _,pg in pairs(pages) do
+        pg.Visible=true
+        pg.Active=true
     end
 end
 
-for name,b in pairs(navButtons) do
-    conn(b.Activated:Connect(function() setPage(name) end))
-end
-
---==================================================
--- COMBAT
---==================================================
 
 resetPage("Combat")
+updateResponsiveLayout()
 local combat = pages.Combat
 section(combat,"SHERIFF",4)
 
-toggleCard(combat,"Aim Bot","Camera aim assist inside FOV",function() return S.AimBot end,function(v) S.AimBot=v end,function()
-    openDrawer("Aim Bot",function()
+toggleCard(combat,"Silent Aim","Camera aim assist inside FOV",function() return S.SilentAim end,function(v) S.SilentAim=v end,function()
+    openDrawer("Silent Aim",function()
         local y=4
         local function dt(t,get,set)
             drawerToggle(t,get,set,y); y=y+48
         end
-        -- sliders are custom in drawer for better mobile hit targets
         local function dslider(t,min,max,get,set)
             local c=frame(drawerBody,UDim2.new(1,0,0,52),UDim2.fromOffset(0,y),T().card,.02,710)
             corner(c,9)
             label(c,t,UDim2.new(.45,0,1,0),UDim2.fromOffset(10,0),11,T().text,715)
             local val=label(c,"",UDim2.fromOffset(65,20),UDim2.new(1,-75,.5,-10),10,T().sub,715,Enum.TextXAlignment.Right)
-            local bar=frame(c,UDim2.fromOffset(145,5),UDim2.new(1,-160,.5,-2),T().off,0,715); corner(bar,3)
+            local bar=frame(c,UDim2.fromOffset(145,5),UDim2.new(1,-160,.5,-2),T().off,0,715); bar.Name="HirukuSliderBar"; corner(bar,3)
             local fill=frame(bar,UDim2.fromScale(0,1),UDim2.fromOffset(0,0),T().accent,0,716); corner(fill,3)
             local drag=false
             local function upd(x)
@@ -980,14 +947,6 @@ toggleCard(combat,"Auto Shot Murder","Automatic shot trigger when a valid murder
 toggleCard(combat,"FOV","Display Silent Aim field of view",function() return S.FOV end,function(v) S.FOV=v end,function()
     openDrawer("FOV",function()
         sliderCard(drawerBody,"FOV radius",50,500,function() return S.SilentFOV end,function(v) S.SilentFOV=v end)
-    end)
-end)
-
-toggleCard(combat,"Silent Aim","FOV target indicator; does not alter network/projectile data",function() return S.SilentAim end,function(v) S.SilentAim=v end,function()
-    openDrawer("Silent Aim",function()
-        drawerToggle("Enabled",function() return S.SilentAim end,function(v) S.SilentAim=v end,4)
-        drawerToggle("Line of sight",function() return S.SilentLOS end,function(v) S.SilentLOS=v end,52)
-        drawerToggle("Players",function() return S.SilentPlayers end,function(v) S.SilentPlayers=v end,100)
     end)
 end)
 
@@ -1025,12 +984,53 @@ end)
 
 toggleCard(combat,"Kill All","Attack every valid player in knife range",function() return S.KillAll end,function(v) S.KillAll=v end)
 
---==================================================
--- VISUALS
---==================================================
+resetPage("Movement")
+local movement=pages.Movement
+section(movement,"MOVEMENT",4)
 
-resetPage("Visuals")
-local visuals=pages.Visuals
+toggleCard(movement,"Fly","Joystick movement + jump to rise",function() return S.Fly end,function(v)
+    S.Fly=v
+    if v then
+        local h=humanoid(char())
+        if h then originalWalkSpeed=h.WalkSpeed end
+    end
+end,function()
+    openDrawer("Fly",function()
+        sliderCard(drawerBody,"Fly speed",15,120,function() return S.FlySpeed end,function(v) S.FlySpeed=v end)
+    end)
+end)
+
+toggleCard(movement,"Bunny Hop","CS-style jump acceleration with joystick",function() return S.BunnyHop end,function(v)
+    S.BunnyHop=v
+    local h=humanoid(char())
+    if v then
+        if h then originalWalkSpeed=h.WalkSpeed end
+        S.BunnyCurrentSpeed=h and h.WalkSpeed or 16
+    elseif h then
+        h.WalkSpeed=originalWalkSpeed or 16
+    end
+end,function()
+    openDrawer("Bunny Hop",function()
+        sliderCard(drawerBody,"Initial speed",16,120,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
+        drawerToggle("Infinite acceleration",function() return S.BunnyInfinite end,function(v) S.BunnyInfinite=v end,64)
+        sliderCard(drawerBody,"Acceleration",1,15,function() return S.BunnyAccel end,function(v) S.BunnyAccel=v end)
+        sliderCard(drawerBody,"Air control",0,1,function() return S.BunnyAirControl end,function(v) S.BunnyAirControl=v end)
+        drawerToggle("Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end,190)
+    end)
+end)
+
+toggleCard(movement,"No Clip","Disable character collisions",function() return S.NoClip end,function(v) S.NoClip=v end)
+
+toggleCard(movement,"Spin","Rotate the character continuously",function() return S.Spin end,function(v) S.Spin=v end,function()
+    openDrawer("Spin",function()
+        sliderCard(drawerBody,"Spin speed",20,5000,function() return S.SpinSpeed end,function(v) S.SpinSpeed=v end)
+    end)
+end)
+
+
+
+resetPage("Render")
+local visuals=pages.Render
 section(visuals,"PLAYER VISUALS",4)
 toggleCard(visuals,"Chams","Role-aware player highlights",function() return S.Chams end,function(v) S.Chams=v end)
 toggleCard(visuals,"Role Labels","Show player name and detected role",function() return S.RoleLabels end,function(v) S.RoleLabels=v end)
@@ -1057,56 +1057,13 @@ toggleCard(visuals,"Sky Color","Tint the local sky and environment",function() r
     end)
 end)
 toggleCard(visuals,"Ambient Boost","Raise local ambient lighting",function() return S.AmbientBoost end,function(v) S.AmbientBoost=v end)
+toggleCard(visuals,"FOV Ring","Display the aim FOV ring",function() return S.FOV end,function(v) S.FOV=v end)
 section(visuals,"COINS",350)
-toggleCard(visuals,"Coin Radar","Highlight nearby MM2 coins",function() return S.CoinRadar end,function(v) S.CoinRadar=v; if not v then clearCoinRadar() end end)
+toggleCard(visuals,"Coin Radar","Highlight objects named Coin",function() return S.CoinRadar end,function(v) S.CoinRadar=v; if not v then clearCoinRadar() end end)
 
---==================================================
--- MISC
---==================================================
 
 resetPage("Misc")
 local misc=pages.Misc
-section(misc,"MOVEMENT",4)
-
-toggleCard(misc,"Fly","Joystick movement + jump to rise",function() return S.Fly end,function(v)
-    S.Fly=v
-    if v then
-        local h=humanoid(char())
-        if h then originalWalkSpeed=h.WalkSpeed end
-    end
-end,function()
-    openDrawer("Fly",function()
-        sliderCard(drawerBody,"Fly speed",15,120,function() return S.FlySpeed end,function(v) S.FlySpeed=v end)
-    end)
-end)
-
-toggleCard(misc,"Bunny Hop","CS-style jump acceleration with joystick",function() return S.BunnyHop end,function(v)
-    S.BunnyHop=v
-    local h=humanoid(char())
-    if v then
-        if h then originalWalkSpeed=h.WalkSpeed end
-        S.BunnyCurrentSpeed=h and h.WalkSpeed or 16
-    elseif h then
-        h.WalkSpeed=originalWalkSpeed or 16
-    end
-end,function()
-    openDrawer("Bunny Hop",function()
-        sliderCard(drawerBody,"Initial speed",16,120,function() return S.BunnySpeed end,function(v) S.BunnySpeed=v end)
-        drawerToggle("Infinite acceleration",function() return S.BunnyInfinite end,function(v) S.BunnyInfinite=v end,64)
-        sliderCard(drawerBody,"Acceleration",1,15,function() return S.BunnyAccel end,function(v) S.BunnyAccel=v end)
-        sliderCard(drawerBody,"Air control",0,1,function() return S.BunnyAirControl end,function(v) S.BunnyAirControl=v end)
-        drawerToggle("Auto strafe",function() return S.BunnyAutoStrafe end,function(v) S.BunnyAutoStrafe=v end,190)
-    end)
-end)
-
-toggleCard(misc,"No Clip","Disable character collisions",function() return S.NoClip end,function(v) S.NoClip=v end)
-
-toggleCard(misc,"Spin","Rotate the character continuously",function() return S.Spin end,function(v) S.Spin=v end,function()
-    openDrawer("Spin",function()
-        sliderCard(drawerBody,"Spin speed",20,5000,function() return S.SpinSpeed end,function(v) S.SpinSpeed=v end)
-    end)
-end)
-
 section(misc,"TARGET",285)
 toggleCard(misc,"Sex Aura","Move rapidly toward the selected player",function() return S.TargetAura end,function(v) S.TargetAura=v end,function()
     openDrawer("Target Aura",function()
@@ -1142,79 +1099,74 @@ toggleCard(misc,"Auto Pickup Gun","Instantly attempts supported dropped-gun pick
 end)
 toggleCard(misc,"Anti AFK","Keep the client active",function() return S.AntiAFK end,function(v) S.AntiAFK=v end)
 
---==================================================
--- SETTINGS
---==================================================
-
-resetPage("Settings")
-local settings=pages.Settings
-section(settings,"INTERFACE",4)
-
-toggleCard(settings,"Language","English / Russian",function() return S.Language=="Russian" end,function(v) S.Language=v and "Russian" or "English" end)
-
-toggleCard(settings,"Theme","Choose a visual theme",function() return false end,function(v) end,function()
+section(misc,"INTERFACE",620)
+toggleCard(misc,"Language","English / Russian",function() return S.Language=="Russian" end,function(v) S.Language=v and "Russian" or "English" end)
+toggleCard(misc,"Theme","Choose a visual theme",function() return false end,function() end,function()
     openDrawer("Themes",function()
         local y=4
         for name in pairs(THEMES) do
             local b=button(drawerBody,name,UDim2.new(1,0,0,42),UDim2.fromOffset(0,y),710)
             b.TextColor3=name==S.Theme and T().text or T().sub
-            conn(b.Activated:Connect(function()
-                S.Theme=name
-                notify("Theme: "..name)
-                -- refresh is handled by the theme pass below
-            end))
+            conn(b.Activated:Connect(function() S.Theme=name; notify("Theme: "..name) end))
             y=y+47
         end
     end)
 end)
-
-toggleCard(settings,"Font","Change menu typography",function() return false end,function(v) end,function()
+toggleCard(misc,"Font","Change menu typography",function() return false end,function() end,function()
     openDrawer("Fonts",function()
         local y=4
         for name in pairs(FONT_MAP) do
             local b=button(drawerBody,name,UDim2.new(1,0,0,36),UDim2.fromOffset(0,y),710)
             b.TextColor3=name==S.Font and T().text or T().sub
-            conn(b.Activated:Connect(function()
-                S.Font=name
-                notify("Font: "..name)
-            end))
+            conn(b.Activated:Connect(function() S.Font=name; notify("Font: "..name) end))
             y=y+40
         end
     end)
 end)
-
-sliderCard(settings,"Interface size",80,120,function() return S.UIScale*100 end,function(v)
+sliderCard(misc,"Interface size",80,120,function() return S.UIScale*100 end,function(v)
     local vp=Camera.ViewportSize
-    local oldCenter=main.AbsolutePosition + main.AbsoluteSize/2
+    local center=Vector2.new(main.AbsolutePosition.X+main.AbsoluteSize.X/2,main.AbsolutePosition.Y+main.AbsoluteSize.Y/2)
     S.UIScale=math.clamp(v/100,.80,1.20)
     scaleGui()
     fitWindow()
+    local w,h=main.AbsoluteSize.X,main.AbsoluteSize.Y
+    main.Position=UDim2.fromOffset(math.clamp(center.X-w/2,8,math.max(8,vp.X-w-8)),math.clamp(center.Y-h/2,8,math.max(8,vp.Y-h-8)))
     updateResponsiveLayout()
-    if S.Open then
-        local newSize=main.AbsoluteSize
-        local x=math.clamp(oldCenter.X-newSize.X/2,8,math.max(8,vp.X-newSize.X-8))
-        local y=math.clamp(oldCenter.Y-newSize.Y/2,8,math.max(8,vp.Y-newSize.Y-8))
-        main.Position=UDim2.fromOffset(x,y)
-    end
 end)
-toggleCard(settings,"Show Notifications","Show status messages in the lower-left",function() return S._showNotifications~=false end,function(v) S._showNotifications=v end)
-sliderCard(settings,"Menu Opacity",50,95,function() return S.MenuOpacity*100 end,function(v)
-    S.MenuOpacity=math.clamp(v/100,.50,.95)
-    main.BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45)
-end)
-toggleCard(settings,"Reset Position","Center the menu on the screen",function() return false end,function(v)
+toggleCard(misc,"Show Notifications","Show status messages in the lower-left",function() return S._showNotifications~=false end,function(v) S._showNotifications=v end)
+sliderCard(misc,"Menu Opacity",50,95,function() return S.MenuOpacity*100 end,function(v) S.MenuOpacity=math.clamp(v/100,.50,.95); main.BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45) end)
+toggleCard(misc,"Reset Position","Center the menu on the screen",function() return false end,function(v)
     if v then
         local vp=Camera.ViewportSize
         local target=menuTargetSize()
-        local scale=math.clamp(S.UIScale,.80,1.20)
-        main.Position=UDim2.fromOffset((vp.X-target.X.Offset*scale)/2/scale,(vp.Y-target.Y.Offset*scale)/2/scale)
+        main.Position=UDim2.fromOffset((vp.X-target.X.Offset)/2,(vp.Y-target.Y.Offset)/2)
     end
 end)
+resetPage("Player")
+local playerPage=pages.Player
+section(playerPage,"PLAYER",4)
+toggleCard(playerPage,"Role Labels","Show detected role above players",function() return S.RoleLabels end,function(v) S.RoleLabels=v end)
+toggleCard(playerPage,"Watermark","Show FPS, player name and ping",function() return S.Watermark end,function(v) S.Watermark=v end)
+toggleCard(playerPage,"Anti AFK","Keep the client active",function() return S.AntiAFK end,function(v) S.AntiAFK=v end)
+toggleCard(playerPage,"Target Aura","Move toward a selected player",function() return S.TargetAura end,function(v) S.TargetAura=v end,function()
+    openDrawer("Target Aura",function()
+        sliderCard(drawerBody,"Speed",10,120,function() return S.TargetAuraSpeed end,function(v) S.TargetAuraSpeed=v end)
+        local y=78
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr~=LocalPlayer then
+                local b=button(drawerBody,plr.DisplayName.."  @"..plr.Name,UDim2.new(1,0,0,36),UDim2.fromOffset(0,y),710)
+                conn(b.Activated:Connect(function() S.TargetAuraPlayer=plr; notify("Target: "..plr.Name) end))
+                y=y+40
+            end
+        end
+    end)
+end)
+toggleCard(playerPage,"Camera FOV","Change local camera field of view",function() return S.CameraFOVEnabled end,function(v) S.CameraFOVEnabled=v end,function()
+    openDrawer("Camera FOV",function()
+        sliderCard(drawerBody,"FOV",50,120,function() return S.CameraFOV end,function(v) S.CameraFOV=v end)
+    end)
+end)
 
-
---==================================================
--- FOV / WATERMARK / CROSSHAIR
---==================================================
 
 local fovCircle=Instance.new("Frame")
 fovCircle.BackgroundTransparency=1
@@ -1239,9 +1191,6 @@ stroke(watermark,T().line,.12)
 local wmText=label(watermark,"",UDim2.fromScale(1,1),UDim2.fromOffset(0,0),12,T().text,505,Enum.TextXAlignment.Center)
 addInst(watermark)
 
---==================================================
--- ROLE DETECTION
---==================================================
 
 local function roleOf(plr)
     if not plr then return "Unknown" end
@@ -1338,6 +1287,37 @@ local function isPlayerCharacterModel(m)
     return m and Players:GetPlayerFromCharacter(m) ~= nil
 end
 
+local function clearCoinRadar()
+    for obj,h in pairs(COIN_RADAR) do pcall(function() h:Destroy() end); COIN_RADAR[obj]=nil end
+end
+local function refreshCoinRadar()
+    if not S.CoinRadar then clearCoinRadar(); return end
+    local seen={}
+    for _,d in ipairs(Workspace:GetDescendants()) do
+        if d.Name=="Coin" then
+            local part=d:IsA("BasePart") and d or (d:IsA("Model") and (d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart",true)))
+            if part then
+                seen[part]=true
+                if not COIN_RADAR[part] then
+                    local h=Instance.new("Highlight")
+                    h.Name="HirukuCoinRadar"
+                    h.Adornee=part
+                    h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+                    h.FillColor=T().accent
+                    h.OutlineColor=T().text
+                    h.FillTransparency=.55
+                    h.OutlineTransparency=.05
+                    h.Parent=gui
+                    COIN_RADAR[part]=h
+                end
+            end
+        end
+    end
+    for part,h in pairs(COIN_RADAR) do
+        if not part.Parent or not seen[part] then pcall(function() h:Destroy() end); COIN_RADAR[part]=nil end
+    end
+end
+
 local function removeGunEsp(obj)
     local h=GUN_ESPS[obj]
     if h then pcall(function() h:Destroy() end) end
@@ -1392,9 +1372,6 @@ local function refreshGunEsp()
 end
 
 
---==================================================
--- TARGETING / AIM ASSIST
---==================================================
 
 local function lineOfSight(part, targetModel)
     if not S.SilentLOS then return true end
@@ -1451,9 +1428,6 @@ local function bestTarget()
     return best
 end
 
---==================================================
--- WEAPON / ATTACK HELPERS
---==================================================
 
 local function findTool(names)
     local c=char()
@@ -1489,59 +1463,6 @@ local function knifeAttack(target)
     return equipAndActivate(knife)
 end
 
---==================================================
--- COIN / GUN SEARCH
---==================================================
-
-local function clearCoinRadar()
-    for obj,hl in pairs(COIN_RADAR) do
-        pcall(function() hl:Destroy() end)
-        COIN_RADAR[obj]=nil
-    end
-end
-
-local function coinPart(obj)
-    if obj:IsA("BasePart") then return obj end
-    if obj:IsA("Model") then
-        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true)
-    end
-    return obj:FindFirstChildWhichIsA("BasePart",true)
-end
-
-local function refreshCoinRadar()
-    if not S.CoinRadar then
-        clearCoinRadar()
-        return
-    end
-    local seen={}
-    for _,d in ipairs(Workspace:GetDescendants()) do
-        local n=d.Name:lower()
-        if n=="coin" or n=="coin_server" or n=="coinvisual" then
-            local part=coinPart(d)
-            if part and part:IsDescendantOf(Workspace) then
-                seen[part]=true
-                if not COIN_RADAR[part] then
-                    local hl=Instance.new("Highlight")
-                    hl.Name="HirukuCoinRadar"
-                    hl.Adornee=part
-                    hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-                    hl.FillTransparency=.72
-                    hl.OutlineTransparency=.05
-                    hl.FillColor=Color3.fromRGB(255,220,70)
-                    hl.OutlineColor=Color3.fromRGB(255,245,170)
-                    hl.Parent=gui
-                    COIN_RADAR[part]=hl
-                end
-            end
-        end
-    end
-    for part,hl in pairs(COIN_RADAR) do
-        if not seen[part] or not part.Parent then
-            pcall(function() hl:Destroy() end)
-            COIN_RADAR[part]=nil
-        end
-    end
-end
 
 local function findNamedNearest(name)
     local rr=root(char())
@@ -1600,9 +1521,6 @@ local function touchPickup(part)
     return used
 end
 
---==================================================
--- MOVEMENT
---==================================================
 
 local function rememberMovementDefaults()
     local h=humanoid(char())
@@ -1634,7 +1552,6 @@ local function doFly(dt)
         targetVel=move.Unit*S.FlySpeed
     end
 
-    -- Android jump button is the vertical control.
     local state=h:GetState()
     if h.Jump or state==Enum.HumanoidStateType.Jumping then
         flyVerticalUntil=math.max(flyVerticalUntil,os.clock()+.32)
@@ -1656,18 +1573,11 @@ local function stopFly()
         h.PlatformStand=false
         h.AutoRotate=originalAutoRotate==nil and true or originalAutoRotate
     end
-    -- Never modify velocity here; doing so breaks normal Roblox running/jumping.
 end
 
---==================================================
--- ANTI AFK
---==================================================
 
 local afkTick=0
 
---==================================================
--- HEARTBEAT
---==================================================
 
 local fps=60
 local frames=0
@@ -1684,7 +1594,8 @@ conn(RunService.RenderStepped:Connect(function(dt)
     fpsClock+=dt
     if fpsClock>=1 then fps=frames/fpsClock;frames=0;fpsClock=0 end
 
-    -- FOV
+    if S.CameraFOVEnabled then Camera.FieldOfView=S.CameraFOV else Camera.FieldOfView=70 end
+
     fovCircle.Visible=S.FOV
     local fovDiameter=S.SilentFOV*2
     fovCircle.Size=UDim2.fromOffset(fovDiameter,fovDiameter)
@@ -1694,7 +1605,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
 
     cross.Visible=S.Crosshair
 
-    -- Watermark
     watermark.Visible=S.Watermark
     local ping="?"
     pcall(function()
@@ -1703,28 +1613,25 @@ conn(RunService.RenderStepped:Connect(function(dt)
     end)
     wmText.Text=string.format("Hiruku  •  %d FPS  •  %s  •  %d ms",math.floor(fps+0.5),LocalPlayer.Name,ping)
 
-    -- Aim assist
     aimClock += dt
     if aimClock >= .045 then
         aimClock=0
-        if S.AimBot then cachedAim=bestTarget() else cachedAim=nil end
+        if S.SilentAim then cachedAim=bestTarget() else cachedAim=nil end
     end
-    if S.AimBot and cachedAim and UIS.MouseEnabled == false then
+    if S.SilentAim and cachedAim and UIS.MouseEnabled == false then
         local desired=CFrame.lookAt(Camera.CFrame.Position,cachedAim.Position)
         Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(S.SilentSmooth*3,0,1))
-    elseif S.AimBot and cachedAim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+    elseif S.SilentAim and cachedAim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local desired=CFrame.lookAt(Camera.CFrame.Position,cachedAim.Position)
         Camera.CFrame=Camera.CFrame:Lerp(desired,math.clamp(S.SilentSmooth*3,0,1))
     end
 
-    -- Fly
     if S.Fly then
         doFly(dt)
     else
         stopFly()
     end
 
-    -- Bunny hop: gradual acceleration while moving, automatic jump on landing.
     if S.BunnyHop and not S.Fly and not S.CoinFarm then
         local h=humanoid(char())
         if h and h.Health>0 then
@@ -1753,7 +1660,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
         S.BunnyCurrentSpeed=originalWalkSpeed or 16
     end
 
-    -- No clip with restoration when disabled.
     if S.NoClip and char() then
         for _,p in ipairs(char():GetDescendants()) do
             if p:IsA("BasePart") then
@@ -1775,13 +1681,11 @@ conn(RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- Spin
     if S.Spin then
         local r=root(char())
         if r then r.CFrame=r.CFrame*CFrame.Angles(0,math.rad(S.SpinSpeed)*dt,0) end
     end
 
-    -- Local visual lighting / sky tint
     if S.SkyEnabled then
         Lighting.Ambient=S.SkyColor
         Lighting.OutdoorAmbient=S.SkyColor
@@ -1798,7 +1702,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
         Lighting.OutdoorAmbient=savedLighting.OutdoorAmbient
     end
 
-    -- Target Aura
     if S.TargetAura and playerAlive(S.TargetAuraPlayer) then
         local rr=root(char())
         local tr=root(S.TargetAuraPlayer.Character)
@@ -1817,7 +1720,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
         if S.AutoPickupGun then cachedGun=findDroppedGun() else cachedGun=nil end
     end
 
-    -- Coin Farm: short, controlled hops to the nearest Coin so walls do not stall the route.
     if S.CoinFarm and not S.Fly then
         local coin=cachedCoin
         local rr=root(char())
@@ -1835,8 +1737,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- Auto Pickup Gun: briefly place the character at the dropped gun, fire every
-    -- available pickup mechanism, then immediately restore the previous position.
     if S.AutoPickupGun and cachedGun and os.clock()-lastGunPickup>.30 then
         lastGunPickup=os.clock()
         local rr=root(char())
@@ -1852,8 +1752,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- Kill Aura / Selected / All
-    -- Player-target movement is restricted to explicit allowlisted targets.
     if os.clock()-lastAttack>=S.AttackCooldown then
         local targets={}
         local function addTarget(plr)
@@ -1887,7 +1785,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- Anti AFK: gentle input pulse only while enabled
     if S.AntiAFK then
         afkTick+=dt
         if afkTick>55 then
@@ -1900,9 +1797,6 @@ conn(RunService.RenderStepped:Connect(function(dt)
     end
 end))
 
---==================================================
--- PLAYER EVENTS
---==================================================
 
 conn(Players.PlayerAdded:Connect(function(p)
     conn(p:GetAttributeChangedSignal("Role"):Connect(function() if S.Chams or S.RoleLabels then updateVisual(p) end end))
@@ -1937,38 +1831,51 @@ conn(LocalPlayer.CharacterAdded:Connect(function()
     end
 end))
 
---==================================================
--- THEME / FONT REFRESH
---==================================================
 
 local function applyStyle(rootGui)
     if not rootGui then return end
+    local theme=T()
+    main.BackgroundColor3=theme.panel
+    glass.BackgroundColor3=theme.panel
+    search.BackgroundColor3=theme.card
+    search.TextColor3=theme.text
+    search.PlaceholderColor3=theme.sub
+    pill.BackgroundColor3=theme.panel
+    toast.BackgroundColor3=theme.panel
+    watermark.BackgroundColor3=theme.panel
+    for _,name in ipairs(pageNames) do
+        local shell=COLUMN_SHELLS[name]
+        local header=COLUMN_HEADERS[name]
+        if shell then shell.BackgroundColor3=theme.panel end
+        if header then header.BackgroundColor3=theme.panel end
+    end
     for _,o in ipairs(rootGui:GetDescendants()) do
         if o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox") then
             o.Font=FONT_MAP[S.Font] or Enum.Font.Gotham
             if o==search then
-                o.TextColor3=T().text
-                o.PlaceholderColor3=T().sub
+                o.TextColor3=theme.text
+                o.PlaceholderColor3=theme.sub
+            elseif o==title or o==version then
+                o.TextColor3=theme.text
             else
-                o.TextColor3=T().text
+                o.TextColor3=theme.text
             end
         end
-        if o:IsA("Frame") or o:IsA("TextButton") or o:IsA("TextBox") then
-            -- Only recolor known Hiruku surfaces; avoid changing game UI.
-            if o==main or o:IsDescendantOf(main) then
-                if o==main or o==glass then
-                    o.BackgroundColor3=T().panel
-                    if o==main then o.BackgroundTransparency=math.clamp(1-S.MenuOpacity,.08,.45) end
-                elseif o:IsA("TextButton") or o:IsA("TextBox") then
-                    if o==search then o.BackgroundColor3=T().card end
-                end
+        if o.Name=="HirukuCard" then o.BackgroundColor3=theme.card end
+        if o.Name=="HirukuSliderBar" then o.BackgroundColor3=theme.off end
+        if o.Name=="HirukuSliderFill" or o.Name=="HirukuSliderKnob" then o.BackgroundColor3=theme.accent end
+        if o:IsA("TextButton") and (o.Parent==main or o:IsDescendantOf(main) or o.Parent==drawerBody or o:IsDescendantOf(drawerBody)) and o~=close and o~=drawerClose then
+            if o.Name=="HirukuSwitch" then
+                o.BackgroundColor3=o:GetAttribute("HirukuState") and theme.on or theme.off
+            else
+                o.BackgroundColor3=theme.card
             end
+        end
+        if o:IsA("UIStroke") and (o:IsDescendantOf(main) or o:IsDescendantOf(drawer)) then
+            o.Color=theme.line
         end
     end
-    pill.BackgroundColor3=T().panel
-    toast.BackgroundColor3=T().panel
-    watermark.BackgroundColor3=T().panel
-    fovCircle:FindFirstChildOfClass("UIStroke").Color=T().accent
+    if fovCircle:FindFirstChildOfClass("UIStroke") then fovCircle:FindFirstChildOfClass("UIStroke").Color=theme.accent end
 end
 
 local lastTheme, lastFont = nil, nil
@@ -1980,11 +1887,6 @@ conn(RunService.Heartbeat:Connect(function(dt)
         applyStyle(gui)
     end
     visualClock += dt
-    coinRadarClock += dt
-    if coinRadarClock >= .50 then
-        coinRadarClock=0
-        refreshCoinRadar()
-    end
     if visualClock >= .20 then
         visualClock=0
         if S.Chams or S.RoleLabels then
@@ -2007,6 +1909,8 @@ conn(RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
+    coinRadarClock += dt
+    if coinRadarClock >= .5 then coinRadarClock=0; refreshCoinRadar() end
     gunEspClock += dt
     if gunEspClock >= .5 then
         gunEspClock = 0
@@ -2018,9 +1922,6 @@ conn(RunService.Heartbeat:Connect(function(dt)
     end
 end))
 
---==================================================
--- SEARCH FILTER
---==================================================
 
 conn(search:GetPropertyChangedSignal("Text"):Connect(function()
     local q = search.Text:lower():gsub("^%s+",""):gsub("%s+$","")
@@ -2047,9 +1948,6 @@ conn(search:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end))
 
---==================================================
--- CLEANUP
---==================================================
 
 function S.Cleanup()
     S.Open=false
@@ -2059,8 +1957,6 @@ function S.Cleanup()
     S.Spin=false
     S.CoinFarm=false
     S.CoinRadar=false
-    S.AimBot=false
-    S.SilentAim=false
     S.AutoPickupGun=false
     disconnectAll()
     for p in pairs(CHAMS) do pcall(function() CHAMS[p]:Destroy() end) end
@@ -2070,7 +1966,6 @@ function S.Cleanup()
     table.clear(CHAMS)
     table.clear(ROLE_LABELS)
     table.clear(GUN_ESPS)
-    table.clear(COIN_RADAR)
     stopFly()
     restoreMovementDefaults()
     Lighting.Ambient=savedLighting.Ambient
@@ -2103,9 +1998,6 @@ end
 
 _G[GKEY]=S
 
---==================================================
--- STARTUP
---==================================================
 
 scaleGui()
 
@@ -2121,15 +2013,11 @@ fitWindow = function()
 end
 fitWindow()
 updateResponsiveLayout()
-conn(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-    fitWindow()
-    updateResponsiveLayout()
-end))
+conn(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function() fitWindow(); updateResponsiveLayout() end))
 setPage("Combat")
 search.Text = ""
 refreshVisuals()
 notify("Hiruku successfully loaded")
 
--- Small startup animation.
 pill.Size=UDim2.fromOffset(0,46)
 tween(pill,.35,{Size=UDim2.fromOffset(148,46)},Enum.EasingStyle.Quint)
